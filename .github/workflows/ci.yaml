@@ -74,9 +74,11 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
     steps:
       - name: Trigger Gitea mirror sync
         run: |
-          curl -X POST \
+          # Gitea is on private network - this step may fail and that's OK
+          curl --connect-timeout 10 -X POST \
             -H "Authorization: token ${{ secrets.GITEA_TOKEN }}" \
-            "https://internal-server:3000/api/v1/repos/your-username/prompt-analyzer/mirror-sync"
+            "https://internal-server:3000/api/v1/repos/your-username/prompt-analyzer/mirror-sync" || true
