@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: init-sql
+  namespace: prompt-analyzer
+data:
+  init.sql: |
+    -- Create prompts table
+    CREATE TABLE IF NOT EXISTS prompts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      minio_key VARCHAR(255) NOT NULL UNIQUE,
+      timestamp TIMESTAMPTZ NOT NULL,
+      working_directory VARCHAR(500),
+      prompt_length INTEGER NOT NULL,
+      prompt_text TEXT NOT NULL,
+      project_name VARCHAR(255),
+      prompt_type VARCHAR(50),
+      token_estimate INTEGER,
+      word_count INTEGER,
+      synced_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- Create indexes
+    CREATE INDEX IF NOT EXISTS idx_prompts_timestamp ON prompts(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_prompts_project ON prompts(project_name);
+    CREATE INDEX IF NOT EXISTS idx_prompts_type ON prompts(prompt_type);
+    CREATE INDEX IF NOT EXISTS idx_prompts_minio_key ON prompts(minio_key);
+
+    -- Create tags table
+    CREATE TABLE IF NOT EXISTS tags (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL UNIQUE,
+      color VARCHAR(7) DEFAULT '#6366f1',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- Create prompt_tags junction table
+    CREATE TABLE IF NOT EXISTS prompt_tags (
+      prompt_id UUID NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+      tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+      PRIMARY KEY (prompt_id, tag_id)
+    );
+
+    -- Create analytics_daily table
+    CREATE TABLE IF NOT EXISTS analytics_daily (
+      date DATE PRIMARY KEY,
+      prompt_count INTEGER DEFAULT 0,
+      total_chars INTEGER DEFAULT 0,
+      total_tokens_est INTEGER DEFAULT 0,
+      unique_projects INTEGER DEFAULT 0,
+      avg_prompt_length NUMERIC(10, 2) DEFAULT 0,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- Create minio_sync_log table
+    CREATE TABLE IF NOT EXISTS minio_sync_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      started_at TIMESTAMPTZ DEFAULT NOW(),
+      completed_at TIMESTAMPTZ,
+      status VARCHAR(20) DEFAULT 'running',
+      files_processed INTEGER DEFAULT 0,
+      files_added INTEGER DEFAULT 0,
+      files_skipped INTEGER DEFAULT 0,
+      error_message TEXT
+    );
