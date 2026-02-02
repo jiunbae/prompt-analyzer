@@ -186,7 +186,7 @@ export function SearchFilters({
           <span className="text-xs text-zinc-500">Active filters:</span>
           {currentSearch && (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs">
-              Search: "{currentSearch}"
+              Search: &quot;{currentSearch}&quot;
               <button
                 onClick={() => {
                   setSearch("");

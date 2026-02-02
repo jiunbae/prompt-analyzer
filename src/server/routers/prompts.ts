@@ -3,7 +3,7 @@ import { createTRPCRouter, publicProcedure } from "../trpc";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
-import { desc, eq, ilike, sql, and, gte, lte } from "drizzle-orm";
+import { desc, eq, ilike, sql, and } from "drizzle-orm";
 
 // Lazy database connection
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;

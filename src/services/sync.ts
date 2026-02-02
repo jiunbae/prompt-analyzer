@@ -237,7 +237,7 @@ export async function syncAll(): Promise<SyncResult> {
 
   try {
     const { db, promptsTable, syncLogTable } = await getDb();
-    const { eq, sql } = await import("drizzle-orm");
+    const { eq } = await import("drizzle-orm");
 
     // Create sync log entry
     const [syncLog] = await db
@@ -548,7 +548,7 @@ export async function getLastSyncStatus() {
 export async function isSyncRunning(): Promise<boolean> {
   try {
     const { db, syncLogTable } = await getDb();
-    const { eq, desc } = await import("drizzle-orm");
+    const { desc } = await import("drizzle-orm");
 
     const [lastSync] = await db
       .select()

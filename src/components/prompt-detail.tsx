@@ -59,7 +59,7 @@ const roleLabels: Record<string, string> = {
 };
 
 export function PromptDetail({
-  id,
+  id: _id,
   sessionId,
   timestamp,
   projectName,
