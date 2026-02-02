@@ -15,20 +15,7 @@ RUN pnpm install --frozen-lockfile
 # Copy source
 COPY . .
 
-# Build args for environment variables
-ARG DATABASE_URL
-ARG MINIO_ENDPOINT
-ARG MINIO_ACCESS_KEY
-ARG MINIO_SECRET_KEY
-ARG MINIO_BUCKET
-
-ENV DATABASE_URL=$DATABASE_URL
-ENV MINIO_ENDPOINT=$MINIO_ENDPOINT
-ENV MINIO_ACCESS_KEY=$MINIO_ACCESS_KEY
-ENV MINIO_SECRET_KEY=$MINIO_SECRET_KEY
-ENV MINIO_BUCKET=$MINIO_BUCKET
-
-# Build the application
+# Build the application (no env vars needed at build time - they're runtime)
 RUN pnpm build
 
 # Production stage
@@ -37,9 +24,6 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
