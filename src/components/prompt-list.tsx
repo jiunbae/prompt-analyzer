@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PromptCard } from "@/components/prompt-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,9 +23,6 @@ interface PromptListProps {
   totalCount?: number;
   currentPage?: number;
   pageSize?: number;
-  onPageChange?: (page: number) => void;
-  onSearch?: (query: string) => void;
-  onSortChange?: (sort: "date" | "tokens") => void;
 }
 
 export function PromptList({
@@ -33,24 +31,35 @@ export function PromptList({
   totalCount = 0,
   currentPage = 1,
   pageSize = 12,
-  onPageChange,
-  onSearch,
-  onSortChange,
 }: PromptListProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<"date" | "tokens">("date");
   const [searchQuery, setSearchQuery] = useState("");
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
+  const handlePageChange = (page: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", page.toString());
+    router.push(`/prompts?${params.toString()}`);
+  };
+
   const handleSortChange = (sort: "date" | "tokens") => {
     setSortBy(sort);
-    onSortChange?.(sort);
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch?.(searchQuery);
+    const params = new URLSearchParams(searchParams.toString());
+    if (searchQuery) {
+      params.set("search", searchQuery);
+    } else {
+      params.delete("search");
+    }
+    params.delete("page");
+    router.push(`/prompts?${params.toString()}`);
   };
 
   if (isLoading) {
@@ -186,7 +195,7 @@ export function PromptList({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onPageChange?.(currentPage - 1)}
+              onClick={() => handlePageChange(currentPage - 1)}
               disabled={currentPage <= 1}
             >
               Previous
@@ -194,7 +203,7 @@ export function PromptList({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onPageChange?.(currentPage + 1)}
+              onClick={() => handlePageChange(currentPage + 1)}
               disabled={currentPage >= totalPages}
             >
               Next
