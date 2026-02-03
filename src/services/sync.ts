@@ -25,10 +25,21 @@ export interface SyncOptions {
  * @returns Project name or null if not found
  */
 export function extractProjectName(dir: string): string | null {
-  // Pattern: /Users/username/workspace/{project}/...
-  // or: /Users/username/{project}/...
-  const match = dir.match(/\/Users\/username\/(?:workspace\/)?([^\/]+)/);
-  return match ? match[1] : null;
+  // Try common patterns:
+  // - /Users/{user}/workspace/{project}/...
+  // - /Users/{user}/{project}/...
+  // - /home/{user}/workspace/{project}/...
+  // - /home/{user}/{project}/...
+  const patterns = [
+    /\/(?:Users|home)\/[^/]+\/workspace\/([^/]+)/,
+    /\/(?:Users|home)\/[^/]+\/([^/]+)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = dir.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 /**
