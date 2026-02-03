@@ -8,13 +8,15 @@ import { Badge } from "@/components/ui/badge";
 async function getAnalytics() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
+    console.error("DATABASE_URL is not set");
     return null;
   }
 
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
+  try {
+    const client = postgres(connectionString);
+    const db = drizzle(client, { schema });
 
-  const [stats, dailyStats, projectStats, typeStats, recentPrompts] = await Promise.all([
+    const [stats, dailyStats, projectStats, typeStats, recentPrompts] = await Promise.all([
     // Overall stats
     db
       .select({
@@ -74,15 +76,19 @@ async function getAnalytics() {
       .limit(5),
   ]);
 
-  await client.end();
+    await client.end();
 
-  return {
-    stats: stats[0],
-    dailyStats,
-    projectStats,
-    typeStats,
-    recentPrompts,
-  };
+    return {
+      stats: stats[0],
+      dailyStats,
+      projectStats,
+      typeStats,
+      recentPrompts,
+    };
+  } catch (error) {
+    console.error("Analytics error:", error);
+    return null;
+  }
 }
 
 function formatNumber(num: number): string {
