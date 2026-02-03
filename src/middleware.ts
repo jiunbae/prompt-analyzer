@@ -10,6 +10,7 @@ const publicRoutes = [
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/logout",
+  "/api/config/minio",
 ];
 
 // Routes that accept alternative authentication (X-User-Token header)
