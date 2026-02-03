@@ -7,8 +7,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function SettingsPage() {
-  const { user, loading } = useUser();
+  const { user, loading, refetch } = useUser();
   const [copied, setCopied] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const regenerateToken = async () => {
+    setRegenerating(true);
+    try {
+      const res = await fetch("/api/auth/regenerate-token", { method: "POST" });
+      if (res.ok) {
+        await refetch();
+        setShowConfirm(false);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to regenerate token");
+      }
+    } catch {
+      alert("Failed to regenerate token");
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   const copyToken = async () => {
     if (user?.token) {
@@ -94,6 +114,56 @@ export default function SettingsPage() {
 export PROMPT_MANAGER_TOKEN="${user.token}"
 export PROMPT_MANAGER_ENDPOINT="your-minio-endpoint"`}
                   </pre>
+                </div>
+
+                {/* Regenerate Token */}
+                <div className="pt-4 border-t border-zinc-800">
+                  {showConfirm ? (
+                    <div className="bg-red-900/20 border border-red-800 rounded-lg p-4">
+                      <p className="text-red-300 text-sm mb-3">
+                        Are you sure? This will invalidate your current token. You&apos;ll need to update your Claude Code hook configuration.
+                      </p>
+                      <div className="flex gap-3">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={regenerateToken}
+                          disabled={regenerating}
+                        >
+                          {regenerating ? "Regenerating..." : "Yes, Regenerate"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowConfirm(false)}
+                          disabled={regenerating}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowConfirm(true)}
+                      className="text-red-400 hover:text-red-300 hover:border-red-800"
+                    >
+                      <svg
+                        className="h-4 w-4 mr-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                      Regenerate Token
+                    </Button>
+                  )}
                 </div>
               </>
             ) : (

@@ -78,15 +78,20 @@ const prompts = pgTable("prompts", {
 });
 
 // Configuration from environment
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_NAME = process.env.ADMIN_NAME || "Admin";
 const SALT_ROUNDS = 12;
 
-if (!ADMIN_EMAIL) {
-  console.error("ERROR: ADMIN_EMAIL environment variable is required");
-  console.error("Usage: ADMIN_EMAIL=admin@example.com npx tsx scripts/migrate-to-multiuser.ts");
-  process.exit(1);
+function getAdminEmail(): string {
+  const email = process.env.ADMIN_EMAIL;
+  if (!email) {
+    console.error("ERROR: ADMIN_EMAIL environment variable is required");
+    console.error("Usage: ADMIN_EMAIL=admin@example.com npx tsx scripts/migrate-to-multiuser.ts");
+    process.exit(1);
+  }
+  return email;
 }
+
+const ADMIN_EMAIL = getAdminEmail();
 
 function generatePassword(): string {
   const chars =
