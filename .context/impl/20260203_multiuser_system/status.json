@@ -1,0 +1,11 @@
+{
+  "feature": "multi-user-system",
+  "created": "2026-02-03T03:30:00Z",
+  "status": "in_progress",
+  "tasks": [
+    {"id": "01", "name": "db-migration", "status": "pending", "agent": "codex"},
+    {"id": "02", "name": "auth-api", "status": "pending", "agent": "claude"},
+    {"id": "03", "name": "frontend-auth", "status": "pending", "agent": "claude"},
+    {"id": "04", "name": "data-migration", "status": "pending", "agent": "codex"}
+  ]
+}

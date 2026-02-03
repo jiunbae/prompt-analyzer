@@ -1,14 +1,30 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { desc, sql, eq } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cookies } from "next/headers";
+import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 
 // Force dynamic rendering - don't pre-render at build time
 export const dynamic = "force-dynamic";
 
-async function getAnalytics() {
+/**
+ * Get current user from session cookie
+ */
+async function getCurrentUser() {
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+
+  if (!sessionToken) {
+    return null;
+  }
+
+  return parseSessionToken(sessionToken);
+}
+
+async function getAnalytics(userId: string | null) {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     console.error("DATABASE_URL is not set");
@@ -19,8 +35,22 @@ async function getAnalytics() {
     const client = postgres(connectionString);
     const db = drizzle(client, { schema });
 
+    // Build user filter condition
+    const userFilter = userId
+      ? eq(schema.prompts.userId, userId)
+      : undefined;
+
+    // Build SQL user filter for raw SQL queries
+    const userSqlFilter = userId
+      ? sql`user_id = ${userId}`
+      : sql`1=1`;
+
+    const userProjectFilter = userId
+      ? sql`project_name is not null AND user_id = ${userId}`
+      : sql`project_name is not null`;
+
     const [stats, dailyStats, projectStats, typeStats, recentPrompts] = await Promise.all([
-    // Overall stats
+    // Overall stats - filtered by user
     db
       .select({
         totalPrompts: sql<number>`count(*)`,
@@ -29,9 +59,10 @@ async function getAnalytics() {
         uniqueProjects: sql<number>`count(distinct project_name)`,
         avgPromptLength: sql<number>`avg(prompt_length)`,
       })
-      .from(schema.prompts),
+      .from(schema.prompts)
+      .where(userFilter),
 
-    // Daily stats for last 30 days (or all time if less data)
+    // Daily stats for last 30 days (or all time if less data) - filtered by user
     db
       .select({
         date: sql<string>`to_char(timestamp, 'YYYY-MM-DD')`,
@@ -39,11 +70,12 @@ async function getAnalytics() {
         tokens: sql<number>`coalesce(sum(token_estimate), 0)`,
       })
       .from(schema.prompts)
+      .where(userFilter)
       .groupBy(sql`to_char(timestamp, 'YYYY-MM-DD')`)
       .orderBy(sql`to_char(timestamp, 'YYYY-MM-DD')`)
       .limit(30),
 
-    // Top projects
+    // Top projects - filtered by user
     db
       .select({
         project: schema.prompts.projectName,
@@ -51,21 +83,22 @@ async function getAnalytics() {
         tokens: sql<number>`coalesce(sum(token_estimate), 0)`,
       })
       .from(schema.prompts)
-      .where(sql`project_name is not null`)
+      .where(userProjectFilter)
       .groupBy(schema.prompts.projectName)
       .orderBy(desc(sql`count(*)`))
       .limit(10),
 
-    // Prompt types distribution
+    // Prompt types distribution - filtered by user
     db
       .select({
         type: schema.prompts.promptType,
         count: sql<number>`count(*)`,
       })
       .from(schema.prompts)
+      .where(userFilter)
       .groupBy(schema.prompts.promptType),
 
-    // Recent activity (last 5 prompts)
+    // Recent activity (last 5 prompts) - filtered by user
     db
       .select({
         id: schema.prompts.id,
@@ -75,6 +108,7 @@ async function getAnalytics() {
         promptType: schema.prompts.promptType,
       })
       .from(schema.prompts)
+      .where(userFilter)
       .orderBy(desc(schema.prompts.timestamp))
       .limit(5),
   ]);
@@ -110,7 +144,11 @@ function formatDate(date: Date): string {
 }
 
 export default async function AnalyticsPage() {
-  const data = await getAnalytics();
+  // Get current user from session
+  const user = await getCurrentUser();
+  const userId = user?.userId ?? null;
+
+  const data = await getAnalytics(userId);
 
   if (!data) {
     return (

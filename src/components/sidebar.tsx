@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useUser } from "@/contexts/user-context";
+import { Badge } from "@/components/ui/badge";
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ReactNode;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -75,6 +78,29 @@ const navItems: NavItem[] = [
   },
 ];
 
+const adminNavItems: NavItem[] = [
+  {
+    href: "/admin/allowlist",
+    label: "Allowlist",
+    adminOnly: true,
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+        />
+      </svg>
+    ),
+  },
+];
+
 interface SyncStatusProps {
   status: "connected" | "syncing" | "error" | "idle";
 }
@@ -99,6 +125,7 @@ function SyncStatus({ status }: SyncStatusProps) {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user, loading, logout } = useUser();
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-950">
@@ -145,10 +172,92 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Admin Section */}
+        {user?.isAdmin && (
+          <>
+            <div className="pt-4 pb-2">
+              <p className="px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                Admin
+              </p>
+            </div>
+            {adminNavItems.map((item) => {
+              const isActive = pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`
+                    flex items-center gap-3 rounded-lg px-3 py-2
+                    text-sm font-medium transition-colors
+                    ${
+                      isActive
+                        ? "bg-zinc-800 text-zinc-100"
+                        : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100"
+                    }
+                  `}
+                >
+                  {item.icon}
+                  {item.label}
+                </Link>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       <div className="border-t border-zinc-800">
         <SyncStatus status="connected" />
+      </div>
+
+      {/* User Info Section */}
+      <div className="border-t border-zinc-800 p-4">
+        {loading ? (
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-zinc-800 animate-pulse" />
+            <div className="flex-1">
+              <div className="h-4 w-24 bg-zinc-800 rounded animate-pulse" />
+            </div>
+          </div>
+        ) : user ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-medium text-white">
+                {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-zinc-100 truncate">
+                  {user.name || user.email.split("@")[0]}
+                </p>
+                <p className="text-xs text-zinc-500 truncate">{user.email}</p>
+              </div>
+              {user.isAdmin && (
+                <Badge variant="warning" className="shrink-0">
+                  Admin
+                </Badge>
+              )}
+            </div>
+            <button
+              onClick={logout}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
+              Sign Out
+            </button>
+          </div>
+        ) : null}
       </div>
     </aside>
   );

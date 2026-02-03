@@ -9,8 +9,43 @@ import {
   numeric,
   primaryKey,
   index,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
+
+// Users table
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    email: varchar("email", { length: 255 }).notNull().unique(),
+    passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+    token: uuid("token")
+      .notNull()
+      .unique()
+      .default(sql`gen_random_uuid()`), // for MinIO path
+    name: varchar("name", { length: 100 }),
+    isAdmin: boolean("is_admin").default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_users_email").on(table.email),
+    index("idx_users_token").on(table.token),
+  ]
+);
+
+// Allowed emails table (admin allowlist)
+export const allowedEmails = pgTable("allowed_emails", {
+  id: uuid("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  addedBy: uuid("added_by").references(() => users.id),
+  addedAt: timestamp("added_at", { withTimezone: true }).defaultNow(),
+});
 
 // Prompts table (main entity)
 export const prompts = pgTable(
@@ -37,6 +72,9 @@ export const prompts = pgTable(
     syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 
+    // User reference (nullable for migration purposes)
+    userId: uuid("user_id").references(() => users.id),
+
     // Full-text search vector (managed via SQL)
     // Note: TSVECTOR with GENERATED ALWAYS AS requires raw SQL migration
   },
@@ -45,6 +83,7 @@ export const prompts = pgTable(
     index("idx_prompts_project").on(table.projectName),
     index("idx_prompts_type").on(table.promptType),
     index("idx_prompts_minio_key").on(table.minioKey),
+    index("idx_prompts_user").on(table.userId),
   ]
 );
 
@@ -98,8 +137,24 @@ export const minioSyncLog = pgTable("minio_sync_log", {
 });
 
 // Relations
-export const promptsRelations = relations(prompts, ({ many }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
+  prompts: many(prompts),
+  allowedEmails: many(allowedEmails),
+}));
+
+export const allowedEmailsRelations = relations(allowedEmails, ({ one }) => ({
+  addedByUser: one(users, {
+    fields: [allowedEmails.addedBy],
+    references: [users.id],
+  }),
+}));
+
+export const promptsRelations = relations(prompts, ({ one, many }) => ({
   promptTags: many(promptTags),
+  user: one(users, {
+    fields: [prompts.userId],
+    references: [users.id],
+  }),
 }));
 
 export const tagsRelations = relations(tags, ({ many }) => ({
@@ -118,6 +173,10 @@ export const promptTagsRelations = relations(promptTags, ({ one }) => ({
 }));
 
 // Type exports
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type AllowedEmail = typeof allowedEmails.$inferSelect;
+export type NewAllowedEmail = typeof allowedEmails.$inferInsert;
 export type Prompt = typeof prompts.$inferSelect;
 export type NewPrompt = typeof prompts.$inferInsert;
 export type Tag = typeof tags.$inferSelect;

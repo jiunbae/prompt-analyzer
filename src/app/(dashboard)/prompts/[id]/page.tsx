@@ -2,13 +2,29 @@ import { PromptDetail } from "@/components/prompt-detail";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 
 // Force dynamic rendering - don't pre-render at build time
 export const dynamic = "force-dynamic";
 
-async function getPrompt(id: string) {
+/**
+ * Get current user from session cookie
+ */
+async function getCurrentUser() {
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+
+  if (!sessionToken) {
+    return null;
+  }
+
+  return parseSessionToken(sessionToken);
+}
+
+async function getPrompt(id: string, userId: string | null) {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     return null;
@@ -17,10 +33,15 @@ async function getPrompt(id: string) {
   const client = postgres(connectionString);
   const db = drizzle(client, { schema });
 
+  // Build query with user ownership check
+  const whereCondition = userId
+    ? and(eq(schema.prompts.id, id), eq(schema.prompts.userId, userId))
+    : eq(schema.prompts.id, id);
+
   const result = await db
     .select()
     .from(schema.prompts)
-    .where(eq(schema.prompts.id, id))
+    .where(whereCondition)
     .limit(1);
 
   await client.end();
@@ -34,7 +55,12 @@ interface PromptDetailPageProps {
 
 export default async function PromptDetailPage({ params }: PromptDetailPageProps) {
   const resolvedParams = await params;
-  const prompt = await getPrompt(resolvedParams.id);
+
+  // Get current user from session
+  const user = await getCurrentUser();
+  const userId = user?.userId ?? null;
+
+  const prompt = await getPrompt(resolvedParams.id, userId);
 
   if (!prompt) {
     notFound();

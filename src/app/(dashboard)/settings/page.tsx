@@ -1,8 +1,23 @@
+"use client";
+
+import { useState } from "react";
+import { useUser } from "@/contexts/user-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function SettingsPage() {
+  const { user, loading } = useUser();
+  const [copied, setCopied] = useState(false);
+
+  const copyToken = async () => {
+    if (user?.token) {
+      await navigator.clipboard.writeText(user.token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -13,6 +28,80 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-6">
+        {/* User Token Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle>API Token</CardTitle>
+            <CardDescription>
+              Your personal token for MinIO uploads and Claude Code hook integration
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loading ? (
+              <div className="h-10 bg-zinc-800 rounded animate-pulse max-w-md" />
+            ) : user?.token ? (
+              <>
+                <div className="flex gap-3">
+                  <Input
+                    type="text"
+                    value={user.token}
+                    readOnly
+                    className="font-mono text-sm max-w-md"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={copyToken}
+                    className="shrink-0"
+                  >
+                    {copied ? (
+                      <svg
+                        className="h-4 w-4 text-green-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                    )}
+                  </Button>
+                </div>
+                <div className="bg-zinc-800/50 rounded-lg p-4 text-sm text-zinc-400">
+                  <p className="font-medium text-zinc-300 mb-2">Claude Code Hook Configuration</p>
+                  <p className="mb-2">
+                    Use this token when configuring your Claude Code hook to upload prompts:
+                  </p>
+                  <pre className="bg-zinc-900 p-3 rounded text-xs overflow-x-auto">
+{`# In your Claude Code hook script:
+export PROMPT_MANAGER_TOKEN="${user.token}"
+export PROMPT_MANAGER_ENDPOINT="your-minio-endpoint"`}
+                  </pre>
+                </div>
+              </>
+            ) : (
+              <p className="text-zinc-500">No token available</p>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>General</CardTitle>

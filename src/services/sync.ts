@@ -9,6 +9,16 @@ import type {
 } from "./types";
 
 /**
+ * Options for sync operations
+ */
+export interface SyncOptions {
+  /** User token for MinIO path prefix (multi-user support) */
+  userToken?: string;
+  /** User ID to associate prompts with */
+  userId?: string;
+}
+
+/**
  * Extract project name from working directory path
  *
  * @param dir - Working directory path (e.g., "/Users/username/workspace/my-project/src")
@@ -224,20 +234,28 @@ async function getDb() {
 /**
  * Perform a full sync of all prompts from MinIO to database
  *
+ * @param options - Optional sync options including user token for multi-user support
  * @returns Sync result summary
  */
-export async function syncAll(): Promise<SyncResult> {
+export async function syncAll(options?: SyncOptions): Promise<SyncResult> {
   const startTime = Date.now();
   const errors: string[] = [];
   let filesProcessed = 0;
   let filesAdded = 0;
   let filesSkipped = 0;
 
-  console.log("Starting full sync from MinIO...");
+  // Determine the MinIO prefix based on user token
+  // Multi-user path structure: {user_token}/year/month/day/timestamp.json
+  // Legacy path structure: year/month/day/timestamp.json
+  const prefix = options?.userToken ? `${options.userToken}/` : undefined;
+
+  console.log(
+    `Starting full sync from MinIO...${prefix ? ` (prefix: ${prefix})` : " (all objects)"}`
+  );
 
   try {
     const { db, promptsTable, syncLogTable } = await getDb();
-    const { eq } = await import("drizzle-orm");
+    const { eq, and } = await import("drizzle-orm");
 
     // Create sync log entry
     const [syncLog] = await db
@@ -251,14 +269,23 @@ export async function syncAll(): Promise<SyncResult> {
       .returning();
 
     try {
-      // List all objects
-      const objects = await listAllObjects();
+      // List objects (with optional prefix for user-specific sync)
+      const objects = await listAllObjects(PROMPTS_BUCKET, prefix);
       console.log(`Found ${objects.length} objects to process`);
 
       // Get existing keys to avoid duplicates
-      const existingPrompts = await db
-        .select({ minioKey: promptsTable.minioKey })
-        .from(promptsTable);
+      // If syncing for a specific user, only check their prompts
+      let existingPrompts;
+      if (options?.userId) {
+        existingPrompts = await db
+          .select({ minioKey: promptsTable.minioKey })
+          .from(promptsTable)
+          .where(eq(promptsTable.userId, options.userId));
+      } else {
+        existingPrompts = await db
+          .select({ minioKey: promptsTable.minioKey })
+          .from(promptsTable);
+      }
       const existingKeys = new Set(existingPrompts.map((p) => p.minioKey));
       console.log(`Found ${existingKeys.size} existing prompts in database`);
 
@@ -281,7 +308,12 @@ export async function syncAll(): Promise<SyncResult> {
 
           const processed = processPrompt(prompt, obj.name);
 
-          await db.insert(promptsTable).values(processed);
+          // Add userId if provided
+          const insertData = options?.userId
+            ? { ...processed, userId: options.userId }
+            : processed;
+
+          await db.insert(promptsTable).values(insertData);
           filesAdded++;
 
           if (filesAdded % 50 === 0) {
@@ -349,22 +381,32 @@ export async function syncAll(): Promise<SyncResult> {
 /**
  * Perform incremental sync for prompts since a given date
  * Uses the date-based folder structure: {year}/{month}/{day}/
+ * For multi-user: {user_token}/{year}/{month}/{day}/
  *
  * @param since - Date to sync from
+ * @param options - Optional sync options including user token for multi-user support
  * @returns Sync result summary
  */
-export async function syncIncremental(since: Date): Promise<SyncResult> {
+export async function syncIncremental(
+  since: Date,
+  options?: SyncOptions
+): Promise<SyncResult> {
   const startTime = Date.now();
   const errors: string[] = [];
   let filesProcessed = 0;
   let filesAdded = 0;
   let filesSkipped = 0;
 
-  console.log(`Starting incremental sync from ${since.toISOString()}...`);
+  // User token prefix for multi-user support
+  const userPrefix = options?.userToken ? `${options.userToken}/` : "";
+
+  console.log(
+    `Starting incremental sync from ${since.toISOString()}...${userPrefix ? ` (user: ${options?.userToken})` : ""}`
+  );
 
   try {
     const { db, promptsTable, syncLogTable } = await getDb();
-    const { eq, gte } = await import("drizzle-orm");
+    const { eq, gte, and } = await import("drizzle-orm");
 
     // Create sync log entry
     const [syncLog] = await db
@@ -378,15 +420,30 @@ export async function syncIncremental(since: Date): Promise<SyncResult> {
       .returning();
 
     try {
-      // Build prefixes for relevant dates
-      const prefixes = getDatePrefixes(since, new Date());
+      // Build prefixes for relevant dates (with user prefix if multi-user)
+      const datePrefixes = getDatePrefixes(since, new Date());
+      const prefixes = datePrefixes.map((dp) => `${userPrefix}${dp}`);
       console.log(`Scanning ${prefixes.length} date prefixes`);
 
       // Get existing keys for the date range
-      const existingPrompts = await db
-        .select({ minioKey: promptsTable.minioKey })
-        .from(promptsTable)
-        .where(gte(promptsTable.timestamp, since));
+      // If syncing for a specific user, only check their prompts
+      let existingPrompts;
+      if (options?.userId) {
+        existingPrompts = await db
+          .select({ minioKey: promptsTable.minioKey })
+          .from(promptsTable)
+          .where(
+            and(
+              gte(promptsTable.timestamp, since),
+              eq(promptsTable.userId, options.userId)
+            )
+          );
+      } else {
+        existingPrompts = await db
+          .select({ minioKey: promptsTable.minioKey })
+          .from(promptsTable)
+          .where(gte(promptsTable.timestamp, since));
+      }
       const existingKeys = new Set(existingPrompts.map((p) => p.minioKey));
 
       // Process each date prefix
@@ -416,7 +473,13 @@ export async function syncIncremental(since: Date): Promise<SyncResult> {
             }
 
             const processed = processPrompt(prompt, obj.name);
-            await db.insert(promptsTable).values(processed);
+
+            // Add userId if provided
+            const insertData = options?.userId
+              ? { ...processed, userId: options.userId }
+              : processed;
+
+            await db.insert(promptsTable).values(insertData);
             filesAdded++;
           } catch (insertError) {
             const message =
@@ -475,6 +538,26 @@ export async function syncIncremental(since: Date): Promise<SyncResult> {
     errors,
     duration,
   };
+}
+
+/**
+ * Find user by their MinIO token
+ *
+ * @param token - User's unique token
+ * @returns User data or null if not found
+ */
+export async function findUserByToken(token: string) {
+  const { db } = await getDb();
+  const { eq } = await import("drizzle-orm");
+  const schema = await import("@/db/schema");
+
+  const [user] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.token, token))
+    .limit(1);
+
+  return user ?? null;
 }
 
 /**

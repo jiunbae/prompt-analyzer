@@ -4,11 +4,16 @@ import {
   syncIncremental,
   getLastSyncStatus,
   isSyncRunning,
+  findUserByToken,
 } from "@/services/sync";
 import { isMinioConfigured, testMinioConnection } from "@/lib/minio";
 
 /**
  * POST /api/sync - Trigger a sync operation
+ *
+ * Authentication (one of the following):
+ * - Header: X-User-Token: {user_token} (for external tools like Claude Code hook)
+ * - Cookie: auth_session (for web UI)
  *
  * Request body:
  * - type: "full" | "incremental" (default: "full")
@@ -25,6 +30,39 @@ export async function POST(request: NextRequest) {
         },
         { status: 503 }
       );
+    }
+
+    // Authenticate user - try X-User-Token header first (for external tools)
+    // then fall back to session cookie (for web UI)
+    let userId: string | undefined;
+    let userToken: string | undefined;
+
+    const tokenHeader = request.headers.get("X-User-Token");
+    if (tokenHeader) {
+      // External tool authentication via token
+      const user = await findUserByToken(tokenHeader);
+      if (!user) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Invalid user token",
+          },
+          { status: 401 }
+        );
+      }
+      userId = user.id;
+      userToken = user.token;
+      console.log(`Sync requested by user (token auth): ${user.email}`);
+    } else {
+      // Web UI authentication via middleware headers
+      const headerUserId = request.headers.get("x-user-id");
+      const headerUserToken = request.headers.get("x-user-token");
+
+      if (headerUserId && headerUserToken) {
+        userId = headerUserId;
+        userToken = headerUserToken;
+        console.log(`Sync requested by user (session auth): ${headerUserId}`);
+      }
     }
 
     // Check if sync is already running
@@ -61,7 +99,14 @@ export async function POST(request: NextRequest) {
 
     const syncType = body.type || "full";
 
-    console.log(`Starting ${syncType} sync...`);
+    // Build sync options with user context
+    const syncOptions = userId && userToken
+      ? { userId, userToken }
+      : undefined;
+
+    console.log(
+      `Starting ${syncType} sync...${syncOptions ? ` (user-scoped: ${userToken})` : " (global)"}`
+    );
 
     let result;
     if (syncType === "incremental") {
@@ -86,14 +131,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      result = await syncIncremental(sinceDate);
+      result = await syncIncremental(sinceDate, syncOptions);
     } else {
-      result = await syncAll();
+      result = await syncAll(syncOptions);
     }
 
     return NextResponse.json({
       success: result.success,
       type: syncType,
+      userScoped: !!syncOptions,
       filesProcessed: result.filesProcessed,
       filesAdded: result.filesAdded,
       filesSkipped: result.filesSkipped,

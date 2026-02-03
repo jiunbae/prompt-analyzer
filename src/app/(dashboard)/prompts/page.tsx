@@ -4,6 +4,8 @@ import postgres from "postgres";
 import * as schema from "@/db/schema";
 import { desc, sql, and, gte, lte, eq, ilike } from "drizzle-orm";
 import { SearchFilters } from "@/components/search-filters";
+import { cookies } from "next/headers";
+import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 
 // Force dynamic rendering - don't pre-render at build time
 export const dynamic = "force-dynamic";
@@ -17,7 +19,25 @@ interface SearchParams {
   to?: string;
 }
 
-async function getPrompts(params: SearchParams, pageSize: number = 20) {
+/**
+ * Get current user from session cookie
+ */
+async function getCurrentUser() {
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+
+  if (!sessionToken) {
+    return null;
+  }
+
+  return parseSessionToken(sessionToken);
+}
+
+async function getPrompts(
+  params: SearchParams,
+  userId: string | null,
+  pageSize: number = 20
+) {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     return { items: [], totalCount: 0, projects: [] };
@@ -29,8 +49,13 @@ async function getPrompts(params: SearchParams, pageSize: number = 20) {
   const page = parseInt(params.page ?? "1", 10);
   const offset = (page - 1) * pageSize;
 
-  // Build conditions
+  // Build conditions - always filter by user if logged in
   const conditions = [];
+
+  // User filter - only show prompts belonging to the current user
+  if (userId) {
+    conditions.push(eq(schema.prompts.userId, userId));
+  }
 
   if (params.search) {
     conditions.push(ilike(schema.prompts.promptText, `%${params.search}%`));
@@ -56,6 +81,11 @@ async function getPrompts(params: SearchParams, pageSize: number = 20) {
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
+  // Build user-scoped where clause for projects query
+  const userCondition = userId
+    ? and(sql`project_name is not null`, eq(schema.prompts.userId, userId))
+    : sql`project_name is not null`;
+
   const [items, countResult, projectsResult] = await Promise.all([
     db
       .select({
@@ -77,7 +107,7 @@ async function getPrompts(params: SearchParams, pageSize: number = 20) {
     db
       .select({ name: schema.prompts.projectName, count: sql<number>`count(*)` })
       .from(schema.prompts)
-      .where(sql`project_name is not null`)
+      .where(userCondition)
       .groupBy(schema.prompts.projectName)
       .orderBy(desc(sql`count(*)`)),
   ]);
@@ -107,7 +137,11 @@ export default async function PromptsPage({
   const params = await searchParams;
   const pageSize = 20;
 
-  const { items, totalCount, projects } = await getPrompts(params, pageSize);
+  // Get current user from session
+  const user = await getCurrentUser();
+  const userId = user?.userId ?? null;
+
+  const { items, totalCount, projects } = await getPrompts(params, userId, pageSize);
   const currentPage = parseInt(params.page ?? "1", 10);
 
   return (
