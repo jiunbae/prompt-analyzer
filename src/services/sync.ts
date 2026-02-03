@@ -166,11 +166,12 @@ export async function fetchPrompt(
           const prompt = JSON.parse(data) as MinioPrompt;
 
           // Validate required fields
+          const isOutput = key.endsWith("_output.json") || prompt.type === "output";
           if (
             !prompt.timestamp ||
             !prompt.working_directory ||
-            prompt.prompt_length === undefined ||
-            !prompt.prompt
+            (!isOutput && (prompt.prompt_length === undefined || !prompt.prompt)) ||
+            (isOutput && !prompt.response)
           ) {
             console.warn(`Invalid prompt format in ${key}`);
             resolve(null);

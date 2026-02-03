@@ -121,19 +121,16 @@ function findSessionFiles() {
         
         const claudeDir = path.join(projectPath, ".claude");
         if (fs.existsSync(claudeDir)) {
-          // Scan .claude, .claude/transcripts, and .claude/sessions
-          const subDirs = ["", "transcripts", "sessions"];
-          
-          for (const subDir of subDirs) {
-            const targetDir = path.join(claudeDir, subDir);
-            if (!fs.existsSync(targetDir)) continue;
-            
+          const scan = (dir) => {
+            if (!fs.existsSync(dir)) return;
             try {
-              fs.readdirSync(targetDir).forEach(f => {
-                const fullPath = path.join(targetDir, f);
+              fs.readdirSync(dir).forEach(f => {
+                const fullPath = path.join(dir, f);
                 try {
                   const stats = fs.lstatSync(fullPath);
-                  if (stats.isFile() && f.endsWith(".jsonl")) {
+                  if (stats.isDirectory()) {
+                    scan(fullPath);
+                  } else if (f.endsWith(".jsonl")) {
                     files.push({
                       path: fullPath,
                       source: "workspace",
@@ -143,7 +140,8 @@ function findSessionFiles() {
                 } catch (e) {}
               });
             } catch (e) {}
-          }
+          };
+          scan(claudeDir);
         }
       }
     } catch (e) {

@@ -83,7 +83,7 @@ with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             try:
                 dt = datetime.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                 date_path = dt.strftime("%Y/%m/%d")
-            except:
+            except (ValueError, KeyError):
                 date_path = datetime.datetime.utcnow().strftime("%Y/%m/%d")
 
             if entry.get('type') == 'user':
@@ -114,6 +114,7 @@ with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     "type": "output"
                 }, object_path)
         except Exception as e:
+            print(f"  [ERROR] Skipping line in {file_path} due to: {e}")
             continue
 EOF
 done
