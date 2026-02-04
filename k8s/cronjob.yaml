@@ -16,6 +16,12 @@ spec:
           containers:
           - name: sync
             image: curlimages/curl:latest
+            env:
+            - name: SYNC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: prompt-analyzer-secrets
+                  key: SYNC_TOKEN
             command:
             - /bin/sh
             - -c
@@ -23,7 +29,8 @@ spec:
               curl -X POST \
                 "http://prompt-analyzer-service.prompt-analyzer.svc.cluster.local/api/sync" \
                 -H "Content-Type: application/json" \
-                -d '{"type":"incremental","syncType":"cron"}' \
+                -H "X-User-Token: ${SYNC_TOKEN}" \
+                -d '{"type":"full","syncType":"cron"}' \
                 --fail \
                 --silent \
                 --show-error
