@@ -89,6 +89,11 @@ export default function LoginPage() {
               Register
             </Link>
           </div>
+          <div className="mt-6 pt-4 border-t border-zinc-800 text-center">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest">
+              Build: v0.1.2-debug
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

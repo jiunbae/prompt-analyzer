@@ -10,8 +10,8 @@ export const env = createEnv({
     MINIO_BUCKET: z.string().min(1),
     MINIO_USE_SSL: z
       .string()
-      .transform((val) => val === "true")
-      .default("true"),
+      .default("true")
+      .transform((val) => val === "true"),
     REDIS_URL: z.string().url().default("redis://localhost:6379"),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   },
