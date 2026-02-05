@@ -66,6 +66,20 @@ export default async function PromptDetailPage({ params }: PromptDetailPageProps
     notFound();
   }
 
+  const db = drizzle(postgres(process.env.DATABASE_URL!), { schema });
+  const promptWithTags = await db.query.prompts.findFirst({
+    where: eq(schema.prompts.id, prompt.id),
+    with: {
+      promptTags: {
+        with: {
+          tag: true,
+        },
+      },
+    },
+  });
+
+  const tags = promptWithTags?.promptTags.map(pt => pt.tag) ?? [];
+
   // Parse the prompt to create a simple message structure
   const messages = [
     {
@@ -76,6 +90,15 @@ export default async function PromptDetailPage({ params }: PromptDetailPageProps
     },
   ];
 
+  if (prompt.responseText) {
+    messages.push({
+      role: "assistant" as const,
+      content: prompt.responseText,
+      timestamp: prompt.updatedAt ?? prompt.timestamp,
+      tokens: prompt.tokenEstimateResponse ?? Math.ceil((prompt.responseLength ?? 0) / 4),
+    });
+  }
+
   return (
     <PromptDetail
       id={prompt.id}
@@ -85,9 +108,9 @@ export default async function PromptDetailPage({ params }: PromptDetailPageProps
       workingDirectory={prompt.workingDirectory}
       messages={messages}
       inputTokens={prompt.tokenEstimate ?? Math.ceil(prompt.promptLength / 4)}
-      outputTokens={0}
+      outputTokens={prompt.tokenEstimateResponse ?? 0}
       promptType={prompt.promptType}
-      tags={[]}
+      tags={tags}
     />
   );
 }

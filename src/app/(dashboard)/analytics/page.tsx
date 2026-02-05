@@ -3,8 +3,8 @@ import postgres from "postgres";
 import * as schema from "@/db/schema";
 import { desc, sql, eq } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { cookies } from "next/headers";
+import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
+import { TokenUsageChart } from "@/components/charts/token-usage-chart";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 
 // Force dynamic rendering - don't pre-render at build time
@@ -62,17 +62,14 @@ async function getAnalytics(userId: string | null) {
         .from(schema.prompts)
         .where(userFilter),
 
-      // Daily stats for last 30 days (or all time if less data) - filtered by user
       db
         .select({
-          date: sql<string>`to_char(timestamp, 'YYYY-MM-DD')`,
-          count: sql<number>`count(*)`,
-          tokens: sql<number>`coalesce(sum(token_estimate), 0)`,
+          date: schema.analyticsDaily.date,
+          count: schema.analyticsDaily.promptCount,
+          tokens: schema.analyticsDaily.totalTokensEst,
         })
-        .from(schema.prompts)
-        .where(userFilter)
-        .groupBy(sql`to_char(timestamp, 'YYYY-MM-DD')`)
-        .orderBy(sql`to_char(timestamp, 'YYYY-MM-DD')`)
+        .from(schema.analyticsDaily)
+        .orderBy(schema.analyticsDaily.date)
         .limit(30),
 
       // Top projects - filtered by user
@@ -227,39 +224,39 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Daily Activity Chart */}
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardHeader>
-          <CardTitle className="text-lg text-zinc-100">
-            Daily Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-end gap-1" style={{ height: "128px" }}>
-            {dailyStats.map((day, i) => {
-              const heightPx = Math.max((Number(day.count) / maxDailyCount) * 112, 4);
-              const date = new Date(day.date);
-              return (
-                <div
-                  key={i}
-                  className="flex-1 flex flex-col items-end justify-end"
-                  title={`${day.date}: ${day.count} prompts`}
-                >
-                  <div
-                    className="w-full bg-indigo-500 rounded-t transition-all hover:bg-indigo-400"
-                    style={{ height: `${heightPx}px` }}
-                  />
-                  <span className="text-[10px] text-zinc-500 mt-1">
-                    {date.getDate()}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {dailyStats.length === 0 && (
-            <p className="text-zinc-500 text-center py-8">No data for the last 14 days</p>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <CardTitle className="text-lg text-zinc-100">
+              Activity Heatmap
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ActivityHeatmap 
+              data={dailyStats.map(d => ({ 
+                date: d.date, 
+                count: Number(d.count ?? 0) 
+              }))} 
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <CardTitle className="text-lg text-zinc-100">
+              Token Usage
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TokenUsageChart 
+              data={dailyStats.map(d => ({ 
+                date: d.date, 
+                tokens: Number(d.tokens ?? 0) 
+              }))} 
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Top Projects */}
@@ -270,7 +267,7 @@ export default async function AnalyticsPage() {
           <CardContent>
             <div className="space-y-3">
               {projectStats.map((project, i) => (
-                <div key={i} className="flex items-center justify-between">
+                <div key={project.project || i} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-zinc-500 text-sm w-4">{i + 1}.</span>
                     <span className="text-zinc-200 font-medium">
@@ -312,7 +309,7 @@ export default async function AnalyticsPage() {
                     : type.type ?? "Unknown";
 
                 return (
-                  <div key={i} className="space-y-1">
+                  <div key={type.type || i} className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span className="text-zinc-300">{label}</span>
                       <span className="text-zinc-400">

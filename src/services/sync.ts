@@ -11,24 +11,12 @@ import type {
   SyncResult,
 } from "./types";
 
-/**
- * Options for sync operations
- */
 export interface SyncOptions {
-  /** User token for MinIO path prefix (multi-user support) */
   userToken?: string;
-  /** User ID to associate prompts with */
   userId?: string;
-  /** Sync type for logging purposes: "manual", "auto", or "cron" */
   syncType?: "manual" | "auto" | "cron";
 }
 
-/**
- * Extract project name from working directory path
- *
- * @param dir - Working directory path (e.g., "/Users/username/workspace/my-project/src")
- * @returns Project name or null if not found
- */
 export function extractProjectName(dir: string): string | null {
   const patterns = [
     /\/(?:Users|home)\/[^/]+\/workspace\/([^/]+)/,
@@ -42,32 +30,20 @@ export function extractProjectName(dir: string): string | null {
   return null;
 }
 
-/**
- * Detect prompt type based on content markers
- */
 export function detectPromptType(prompt: string): PromptType {
   if (prompt.includes("<task-notification>")) return "task_notification";
   if (prompt.includes("<system-reminder>")) return "system";
   return "user_input";
 }
 
-/**
- * Estimate token count from text
- */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/**
- * Count words in text
- */
 export function countWords(text: string): number {
   return text.split(/\s+/).filter((word) => word.length > 0).length;
 }
 
-/**
- * Extract metadata from prompt content
- */
 export function extractMetadata(
   prompt: string,
   workingDirectory: string
@@ -80,9 +56,6 @@ export function extractMetadata(
   };
 }
 
-/**
- * List all JSON objects in the MinIO bucket
- */
 export async function listAllObjects(
   bucket: string = PROMPTS_BUCKET,
   prefix?: string
@@ -119,9 +92,6 @@ export async function listAllObjects(
   });
 }
 
-/**
- * Fetch and parse a single prompt from MinIO
- */
 export async function fetchPrompt(
   key: string,
   bucket: string = PROMPTS_BUCKET
@@ -173,9 +143,6 @@ export async function fetchPrompt(
   }
 }
 
-/**
- * Process a raw MinIO prompt into database-ready format
- */
 export function processPrompt(
   minioPrompt: MinioPrompt,
   key: string
@@ -230,9 +197,6 @@ async function getDb() {
   return { db, promptsTable, syncLogTable };
 }
 
-/**
- * Auto-classify a prompt into categories/tags
- */
 export function classifyPrompt(text: string): string[] {
   const tags: string[] = [];
   const lowercase = text.toLowerCase();
@@ -300,9 +264,6 @@ export async function updateDailyAnalytics(dateStr: string) {
   }
 }
 
-/**
- * Perform a full sync of all prompts from MinIO to database
- */
 export async function syncAll(options: SyncOptions): Promise<SyncResult> {
   const startTime = Date.now();
   const errors: string[] = [];
@@ -499,188 +460,6 @@ export async function syncAll(options: SyncOptions): Promise<SyncResult> {
   };
 }
 
-
-  const prefix = `${options.userToken}/`;
-  let syncLogId: string | undefined;
-  const affectedDates = new Set<string>();
-
-  try {
-    const { db, promptsTable, syncLogTable } = await getDb();
-    const { eq, and, sql } = await import("drizzle-orm");
-
-    const [syncLog] = await db
-      .insert(syncLogTable)
-      .values({
-        status: "running",
-        filesProcessed: 0,
-        filesAdded: 0,
-        filesSkipped: 0,
-        userId: options.userId,
-        syncType: options.syncType ?? "manual",
-      })
-      .returning();
-
-    syncLogId = syncLog.id;
-
-    try {
-      const objects = await listAllObjects(PROMPTS_BUCKET, prefix);
-      const existingPrompts = await db
-        .select({ minioKey: promptsTable.minioKey })
-        .from(promptsTable)
-        .where(eq(promptsTable.userId, options.userId));
-      
-      const existingKeys = new Set(existingPrompts.map((p: any) => p.minioKey));
-
-      const inputs = objects.filter((obj) => !obj.name.endsWith("_output.json"));
-      const outputs = objects.filter((obj) => obj.name.endsWith("_output.json"));
-
-      for (const obj of inputs) {
-        filesProcessed++;
-        if (existingKeys.has(obj.name)) {
-          filesSkipped++;
-          continue;
-        }
-
-        try {
-          const promptData = await fetchPrompt(obj.name);
-          if (!promptData) continue;
-
-          const processed = processPrompt(promptData, obj.name);
-          affectedDates.add(processed.timestamp.toISOString().split("T")[0]);
-          const [newPrompt] = await db
-            .insert(promptsTable)
-            .values({
-              ...processed,
-              userId: options.userId,
-              searchVector: sql`to_tsvector('english', ${processed.promptText} || ' ' || ${
-                processed.responseText ?? ""
-              })`,
-            })
-            .returning();
-
-          const suggestedTags = classifyPrompt(processed.promptText);
-          const schema = await import("@/db/schema");
-          for (const tagName of suggestedTags) {
-            let [tag] = await db
-              .select()
-              .from(schema.tags)
-              .where(eq(schema.tags.name, tagName))
-              .limit(1);
-
-            if (!tag) {
-              [tag] = await db
-                .insert(schema.tags)
-                .values({ name: tagName })
-                .onConflictDoNothing()
-                .returning();
-              
-              if (!tag) {
-                [tag] = await db
-                  .select()
-                  .from(schema.tags)
-                  .where(eq(schema.tags.name, tagName))
-                  .limit(1);
-              }
-            }
-
-            if (tag) {
-              await db
-                .insert(schema.promptTags)
-                .values({
-                  promptId: newPrompt.id,
-                  tagId: tag.id,
-                })
-                .onConflictDoNothing();
-            }
-          }
-
-          filesAdded++;
-        } catch (error) {
-          errors.push(`Error processing input ${obj.name}: ${error}`);
-        }
-      }
-
-      for (const obj of outputs) {
-        filesProcessed++;
-        try {
-          const promptData = await fetchPrompt(obj.name);
-          if (!promptData) continue;
-
-          const processed = processPrompt(promptData, obj.name);
-          if (processed.isOutput && processed.inputHash) {
-            const inputKey = obj.name.replace("_output.json", ".json");
-            const [existing] = await db
-              .select()
-              .from(promptsTable)
-              .where(and(eq(promptsTable.minioKey, inputKey), eq(promptsTable.userId, options.userId)))
-              .limit(1);
-
-            if (existing) {
-              await db
-                .update(promptsTable)
-                .set({
-                  responseText: processed.responseText,
-                  responseLength: processed.responseLength,
-                  tokenEstimateResponse: processed.tokenEstimateResponse,
-                  wordCountResponse: processed.wordCountResponse,
-                  searchVector: sql`to_tsvector('english', ${existing.promptText} || ' ' || ${
-                    processed.responseText ?? ""
-                  })`,
-                  updatedAt: new Date(),
-                })
-                .where(eq(promptsTable.id, existing.id));
-              filesAdded++;
-            } else {
-              filesSkipped++;
-            }
-          }
-        } catch (error) {
-          errors.push(`Error processing output ${obj.name}: ${error}`);
-        }
-      }
-
-      await db
-        .update(syncLogTable)
-        .set({
-          status: "completed",
-          completedAt: new Date(),
-          filesProcessed,
-          filesAdded,
-          filesSkipped,
-        })
-        .where(eq(syncLogTable.id, syncLog.id));
-    } catch (error) {
-      await db
-        .update(syncLogTable)
-        .set({
-          status: "failed",
-          completedAt: new Date(),
-          filesProcessed,
-          filesAdded,
-          filesSkipped,
-          errorMessage: String(error),
-        })
-        .where(eq(syncLogTable.id, syncLog.id));
-      throw error;
-    }
-  } catch (error) {
-    errors.push(`Sync failed: ${error}`);
-  }
-
-  return {
-    success: errors.length === 0,
-    filesProcessed,
-    filesAdded,
-    filesSkipped,
-    errors,
-    duration: Date.now() - startTime,
-    syncLogId,
-  };
-}
-
-/**
- * Perform incremental sync for prompts since a given date
- */
 export async function syncIncremental(
   since: Date,
   options: SyncOptions
@@ -697,6 +476,7 @@ export async function syncIncremental(
 
   const userPrefix = `${options.userToken}/`;
   let syncLogId: string | undefined;
+  const affectedDates = new Set<string>();
 
   try {
     const { db, promptsTable, syncLogTable } = await getDb();
@@ -747,6 +527,7 @@ export async function syncIncremental(
           if (!promptData || new Date(promptData.timestamp) < since) continue;
 
           const processed = processPrompt(promptData, obj.name);
+          affectedDates.add(processed.timestamp.toISOString().split("T")[0]);
           await db.insert(promptsTable).values({ ...processed, userId: options.userId });
           filesAdded++;
         } catch (error) {
@@ -770,6 +551,7 @@ export async function syncIncremental(
               .limit(1);
 
             if (existing) {
+              affectedDates.add(existing.timestamp.toISOString().split("T")[0]);
               await db
                 .update(promptsTable)
                 .set({
@@ -803,6 +585,10 @@ export async function syncIncremental(
           filesSkipped,
         })
         .where(eq(syncLogTable.id, syncLog.id));
+
+      for (const date of affectedDates) {
+        await updateDailyAnalytics(date);
+      }
     } catch (error) {
       await db
         .update(syncLogTable)
@@ -832,9 +618,6 @@ export async function syncIncremental(
   };
 }
 
-/**
- * Find user by their MinIO token
- */
 export async function findUserByToken(token: string) {
   const { db } = await getDb();
   const { eq } = await import("drizzle-orm");
@@ -849,9 +632,6 @@ export async function findUserByToken(token: string) {
   return user ?? null;
 }
 
-/**
- * Generate date prefixes for MinIO path structure
- */
 function getDatePrefixes(startDate: Date, endDate: Date): string[] {
   const prefixes: string[] = [];
   const current = new Date(startDate);
@@ -871,9 +651,6 @@ function getDatePrefixes(startDate: Date, endDate: Date): string[] {
   return prefixes;
 }
 
-/**
- * Get the status of the last sync operation
- */
 export async function getLastSyncStatus() {
   try {
     const { db, syncLogTable } = await getDb();
@@ -903,9 +680,6 @@ export async function getLastSyncStatus() {
   }
 }
 
-/**
- * Check if a sync is currently running
- */
 export async function isSyncRunning(): Promise<boolean> {
   try {
     const { db, syncLogTable } = await getDb();

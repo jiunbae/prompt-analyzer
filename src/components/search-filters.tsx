@@ -190,19 +190,39 @@ export function SearchFilters({
 
           <div className="space-y-1">
             <label htmlFor="tag-filter" className="text-xs text-zinc-400 font-medium">Tag</label>
-            <select
-              id="tag-filter"
-              value={currentTag ?? ""}
-              onChange={(e) => handleFilterChange("tag", e.target.value || undefined)}
-              className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-md text-zinc-100 text-sm"
-            >
-              <option value="">All tags</option>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => handleFilterChange("tag", undefined)}
+                className={`px-2 py-1 rounded text-xs transition-colors ${
+                  !currentTag 
+                    ? "bg-zinc-700 text-zinc-100 ring-1 ring-zinc-500" 
+                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+                }`}
+              >
+                All
+              </button>
               {tags.map((t) => (
-                <option key={t.id} value={t.name}>
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => handleFilterChange("tag", t.name)}
+                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                    currentTag === t.name
+                      ? "ring-1 ring-zinc-300 shadow-sm"
+                      : "opacity-70 hover:opacity-100"
+                  }`}
+                  style={{
+                    backgroundColor: currentTag === t.name ? t.color || "#6366f1" : `${t.color || "#6366f1"}22`,
+                    color: currentTag === t.name ? "#fff" : t.color || "#6366f1",
+                    borderColor: t.color || "#6366f1",
+                    borderWidth: "1px",
+                  }}
+                >
                   {t.name}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
         </div>
       )}

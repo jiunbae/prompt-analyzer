@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { SkeletonDetail } from "@/components/ui/skeleton";
+import { MarkdownContent } from "@/components/markdown-content";
+import { useRouter } from "next/navigation";
+
+interface Tag {
+  id: string;
+  name: string;
+  color?: string | null;
+}
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -24,7 +32,7 @@ interface PromptDetailProps {
   messages: Message[];
   inputTokens: number;
   outputTokens: number;
-  tags?: string[];
+  tags?: Tag[];
   isLoading?: boolean;
 }
 
@@ -71,9 +79,33 @@ export function PromptDetail({
   tags = [],
   isLoading = false,
 }: PromptDetailProps) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const totalTokens = inputTokens + outputTokens;
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this prompt? This action cannot be undone.")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/prompts/${_id}`, { method: "DELETE" });
+      if (res.ok) {
+        router.push("/prompts");
+        router.refresh();
+      } else {
+        alert("Failed to delete prompt");
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("An error occurred while deleting");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleCopy = async () => {
     const content = messages
@@ -102,6 +134,7 @@ export function PromptDetail({
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
+            <title>Back Icon</title>
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -113,6 +146,29 @@ export function PromptDetail({
         </Link>
 
         <div className="flex gap-2">
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleDelete}
+            disabled={isDeleting}
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <title>Delete Icon</title>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            {isDeleting ? "Deleting..." : "Delete"}
+          </Button>
+
           <Button variant="outline" size="sm" onClick={handleCopy}>
             {copied ? (
               <>
@@ -122,6 +178,7 @@ export function PromptDetail({
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
+                  <title>Checkmark Icon</title>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -139,6 +196,7 @@ export function PromptDetail({
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
+                  <title>Copy Icon</title>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -165,19 +223,21 @@ export function PromptDetail({
               </div>
             )}
             <div className="flex items-center gap-2 text-zinc-400">
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <title>Timestamp Icon</title>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+
               {formatDate(timestamp)}
             </div>
             {projectName && (
@@ -211,8 +271,12 @@ export function PromptDetail({
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-4">
               {tags.map((tag) => (
-                <Badge key={tag} variant="secondary">
-                  {tag}
+                <Badge
+                  key={tag.id}
+                  variant="secondary"
+                  style={tag.color ? { backgroundColor: `${tag.color}22`, color: tag.color, borderColor: tag.color } : undefined}
+                >
+                  {tag.name}
                 </Badge>
               ))}
             </div>
@@ -220,8 +284,8 @@ export function PromptDetail({
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y divide-zinc-800">
-            {messages.map((message, index) => (
-              <div key={index} className="p-6">
+            {messages.map((message) => (
+              <div key={message.timestamp?.getTime() || message.content} className="p-6">
                 <div className="flex items-center gap-2 mb-3">
                   <span className={`font-medium ${roleColors[message.role]}`}>
                     {roleLabels[message.role]}
@@ -238,9 +302,7 @@ export function PromptDetail({
                   )}
                 </div>
                 <div className="prose prose-invert max-w-none">
-                  <pre className="whitespace-pre-wrap font-mono text-sm text-zinc-300 bg-zinc-800/50 rounded-lg p-4 overflow-x-auto">
-                    {message.content}
-                  </pre>
+                  <MarkdownContent content={message.content} />
                 </div>
               </div>
             ))}
