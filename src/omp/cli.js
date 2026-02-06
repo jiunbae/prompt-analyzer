@@ -242,8 +242,15 @@ function handleStatus(options) {
   }
 }
 
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 function setConfigValue(config, keyPath, value) {
   const keys = keyPath.split(".");
+  for (const key of keys) {
+    if (FORBIDDEN_KEYS.has(key)) {
+      throw new Error(`Invalid config key: "${key}" is not allowed`);
+    }
+  }
   let current = config;
   for (let i = 0; i < keys.length - 1; i += 1) {
     const key = keys[i];
