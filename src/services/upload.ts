@@ -1,5 +1,6 @@
 import { getMinioClient, PROMPTS_BUCKET, isMinioConfigured } from "@/lib/minio";
 import { logger } from "@/lib/logger";
+import { env } from "@/env";
 import { classifyPrompt, updateDailyAnalytics } from "./sync";
 
 export interface UploadRecord {
@@ -32,12 +33,18 @@ export interface UploadResult {
   errors: string[];
 }
 
+function sanitizeEventId(eventId: string): string {
+  // Prevent path traversal: strip directory separators and dot-dot sequences
+  return eventId.replace(/[\/\\]/g, "_").replace(/\.\./g, "_");
+}
+
 function buildMinioKey(userToken: string, createdAt: string, eventId: string): string {
   const date = new Date(createdAt);
   const yyyy = date.getUTCFullYear();
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(date.getUTCDate()).padStart(2, "0");
-  return `${userToken}/${yyyy}/${mm}/${dd}/${eventId}.json`;
+  const safeId = sanitizeEventId(eventId);
+  return `${userToken}/${yyyy}/${mm}/${dd}/${safeId}.json`;
 }
 
 function recordToMinioFormat(record: UploadRecord) {
@@ -68,12 +75,7 @@ export async function processUpload(
   const { eq, sql, inArray } = await import("drizzle-orm");
   const schema = await import("@/db/schema");
 
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    return { success: false, accepted: 0, duplicates: 0, rejected: records.length, errors: ["DATABASE_URL not set"] };
-  }
-
-  const client = postgres(connectionString);
+  const client = postgres(env.DATABASE_URL);
   const db = drizzle(client, { schema });
 
   try {

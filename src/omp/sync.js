@@ -1,8 +1,7 @@
-const os = require("os");
 const http = require("http");
 const https = require("https");
 const { openDb, nowIso } = require("./db");
-const { createSyncLog, finishSyncLog, getSyncState, updateSyncState } = require("./sync-log");
+const { createSyncLog, finishSyncLog, getSyncState, updateSyncState, getDeviceId, getUserToken } = require("./sync-log");
 
 function fetchRows(db, since, lastId) {
   const params = [];
@@ -134,7 +133,7 @@ async function syncToServer(config, options = {}) {
 
       const response = await postJson(uploadUrl, headers, {
         records,
-        deviceId: config.server.deviceId || config.sync?.deviceId || os.hostname(),
+        deviceId: getDeviceId(config),
       });
 
       if (response.status === 401) {
@@ -239,8 +238,8 @@ async function syncToObjectStore(config, options = {}) {
   let uploaded = 0;
   let files = 0;
 
-  const userToken = config.sync?.userToken || "default";
-  const deviceId = config.sync?.deviceId || os.hostname();
+  const userToken = getUserToken(config);
+  const deviceId = getDeviceId(config);
   const logId = createSyncLog(config, since, resolvedType);
 
   try {

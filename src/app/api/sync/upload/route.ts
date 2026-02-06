@@ -1,30 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod/v4";
 import { findUserByToken } from "@/services/sync";
 import { processUpload } from "@/services/upload";
 import type { UploadRecord } from "@/services/upload";
+import { logger } from "@/lib/logger";
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_RECORDS_PER_REQUEST = 1000;
 
-function validateRecord(record: unknown, index: number): string | null {
-  if (!record || typeof record !== "object") {
-    return `records[${index}]: must be an object`;
-  }
-  const r = record as Record<string, unknown>;
-  if (typeof r.event_id !== "string" || !r.event_id) {
-    return `records[${index}]: event_id is required and must be a string`;
-  }
-  if (typeof r.created_at !== "string" || !r.created_at) {
-    return `records[${index}]: created_at is required and must be a string`;
-  }
-  if (typeof r.prompt_text !== "string" || !r.prompt_text) {
-    return `records[${index}]: prompt_text is required and must be a string`;
-  }
-  if (typeof r.prompt_length !== "number") {
-    return `records[${index}]: prompt_length is required and must be a number`;
-  }
-  return null;
-}
+const uploadRecordSchema = z.object({
+  event_id: z.string().min(1),
+  created_at: z.string().min(1),
+  prompt_text: z.string().min(1),
+  response_text: z.string().nullish(),
+  prompt_length: z.number(),
+  response_length: z.number().nullish(),
+  project: z.string().nullish(),
+  cwd: z.string().nullish(),
+  source: z.string().optional(),
+  session_id: z.string().nullish(),
+  role: z.string().optional(),
+  model: z.string().nullish(),
+  cli_name: z.string().optional(),
+  cli_version: z.string().nullish(),
+  token_estimate: z.number().optional(),
+  token_estimate_response: z.number().nullish(),
+  word_count: z.number().optional(),
+  word_count_response: z.number().nullish(),
+  content_hash: z.string().optional(),
+});
+
+const uploadBodySchema = z.object({
+  records: z.array(uploadRecordSchema).max(MAX_RECORDS_PER_REQUEST),
+  deviceId: z.string().optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,32 +66,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse request body
-    let body;
+    let rawBody;
     try {
-      body = await request.json();
+      rawBody = await request.json();
     } catch (error) {
-      console.error("Failed to parse request body as JSON:", error);
+      logger.error({ error }, "Failed to parse request body as JSON");
       return NextResponse.json(
         { error: "Invalid JSON in request body" },
         { status: 400 }
       );
     }
 
-    if (!body.records || !Array.isArray(body.records)) {
+    // Validate with Zod
+    const parseResult = uploadBodySchema.safeParse(rawBody);
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: "Request body must contain a 'records' array" },
+        { error: "Invalid request body", issues: parseResult.error.issues.slice(0, 10) },
         { status: 400 }
       );
     }
 
-    if (body.records.length > MAX_RECORDS_PER_REQUEST) {
-      return NextResponse.json(
-        { error: `Too many records. Maximum ${MAX_RECORDS_PER_REQUEST} per request.` },
-        { status: 400 }
-      );
-    }
+    const { records } = parseResult.data;
 
-    if (body.records.length === 0) {
+    if (records.length === 0) {
       return NextResponse.json({
         success: true,
         accepted: 0,
@@ -92,22 +98,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Validate record shapes
-    const validationErrors: string[] = [];
-    for (let i = 0; i < body.records.length; i++) {
-      const error = validateRecord(body.records[i], i);
-      if (error) validationErrors.push(error);
-    }
-    if (validationErrors.length > 0) {
-      return NextResponse.json(
-        { error: "Invalid records", issues: validationErrors.slice(0, 10) },
-        { status: 400 }
-      );
-    }
-
     // Process the upload
     const result = await processUpload(
-      body.records as UploadRecord[],
+      records as UploadRecord[],
       user.id,
       user.token,
     );
@@ -116,7 +109,7 @@ export async function POST(request: NextRequest) {
       status: result.success ? 200 : 207, // 207 Multi-Status for partial success
     });
   } catch (error) {
-    console.error("Upload error:", error);
+    logger.error({ error }, "Upload error");
     return NextResponse.json(
       { error: "An error occurred during upload" },
       { status: 500 }

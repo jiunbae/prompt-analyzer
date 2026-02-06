@@ -105,4 +105,6 @@ module.exports = {
   getSyncState,
   updateSyncState,
   getSyncStatus,
+  getDeviceId,
+  getUserToken,
 };
