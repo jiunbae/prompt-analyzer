@@ -6,11 +6,30 @@ import type { UploadRecord } from "@/services/upload";
 const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_RECORDS_PER_REQUEST = 1000;
 
+function validateRecord(record: unknown, index: number): string | null {
+  if (!record || typeof record !== "object") {
+    return `records[${index}]: must be an object`;
+  }
+  const r = record as Record<string, unknown>;
+  if (typeof r.event_id !== "string" || !r.event_id) {
+    return `records[${index}]: event_id is required and must be a string`;
+  }
+  if (typeof r.created_at !== "string" || !r.created_at) {
+    return `records[${index}]: created_at is required and must be a string`;
+  }
+  if (typeof r.prompt_text !== "string" || !r.prompt_text) {
+    return `records[${index}]: prompt_text is required and must be a string`;
+  }
+  if (typeof r.prompt_length !== "number") {
+    return `records[${index}]: prompt_length is required and must be a number`;
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // Auth via X-User-Token header (validated by middleware)
-    const userToken =
-      request.headers.get("x-user-token") || request.headers.get("X-User-Token");
+    // Auth via X-User-Token header
+    const userToken = request.headers.get("X-User-Token");
 
     if (!userToken) {
       return NextResponse.json(
@@ -38,9 +57,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse request body
-    const body = await request.json().catch(() => null);
-
-    if (body === null) {
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      console.error("Failed to parse request body as JSON:", error);
       return NextResponse.json(
         { error: "Invalid JSON in request body" },
         { status: 400 }
@@ -69,6 +90,19 @@ export async function POST(request: NextRequest) {
         rejected: 0,
         errors: [],
       });
+    }
+
+    // Validate record shapes
+    const validationErrors: string[] = [];
+    for (let i = 0; i < body.records.length; i++) {
+      const error = validateRecord(body.records[i], i);
+      if (error) validationErrors.push(error);
+    }
+    if (validationErrors.length > 0) {
+      return NextResponse.json(
+        { error: "Invalid records", issues: validationErrors.slice(0, 10) },
+        { status: 400 }
+      );
     }
 
     // Process the upload
