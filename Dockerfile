@@ -15,7 +15,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source
 COPY . .
 
-# Build the application (no env vars needed at build time - they're runtime)
+# Build the application (skip env validation - env vars are runtime only)
+ENV SKIP_ENV_VALIDATION=true
 RUN pnpm build
 
 # Production stage
