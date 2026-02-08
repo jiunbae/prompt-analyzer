@@ -39,4 +39,3 @@ dist/
 tmp/
 
 # Scripts (keep verify-build.js)
-scripts/build-cli.sh

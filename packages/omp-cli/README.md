@@ -463,7 +463,7 @@ MIT © Jiun Bae
 - **GitHub**: https://github.com/jiunbae/oh-my-prompt
 - **npm**: https://www.npmjs.com/package/oh-my-prompt
 - **Issues**: https://github.com/jiunbae/oh-my-prompt/issues
-- **Server Setup**: See [docs/guides/server-setup.md](https://github.com/jiunbae/oh-my-prompt/tree/main/docs/guides)
+- **Docs**: See [docs/](https://github.com/jiunbae/oh-my-prompt/tree/main/docs)
 
 ## Acknowledgments
 
