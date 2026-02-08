@@ -6,9 +6,8 @@ const libDir = path.join(__dirname, '../lib');
 const binFile = path.join(__dirname, '../bin/omp');
 
 // Check lib/ contains required files
-const requiredFiles = [
-  'cli.js', 'config.js', 'hooks.js', 'sync.js', 'doctor.js', 'sync-log.js'
-];
+const srcDir = path.join(__dirname, '../../../src/omp');
+const requiredFiles = fs.readdirSync(srcDir).filter(f => f.endsWith('.js'));
 
 console.log('Verifying build...');
 

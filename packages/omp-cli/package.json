@@ -37,7 +37,7 @@
   ],
   "scripts": {
     "prepublishOnly": "node scripts/verify-build.js",
-    "test": "echo \"Error: no test specified\" && exit 0"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "better-sqlite3": "^11.6.0"

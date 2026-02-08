@@ -328,7 +328,7 @@ Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
 
 ```bash
 # Sync prompts every hour
-(crontab -l 2>/dev/null; echo "0 * * * * /usr/local/bin/omp sync") | crontab -
+(crontab -l 2>/dev/null | grep -Fv 'omp sync' ; echo "0 * * * * /usr/local/bin/omp sync # oh-my-prompt") | crontab -
 ```
 
 Or use a background service (launchd on macOS, systemd on Linux).
