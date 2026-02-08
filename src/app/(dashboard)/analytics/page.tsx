@@ -1,12 +1,16 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
-import { desc, sql, eq } from "drizzle-orm";
+import { desc, sql, eq, and, gte, lt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { TokenUsageChart } from "@/components/charts/token-usage-chart";
+import { QualityTrendChart } from "@/components/charts/quality-trend-chart";
+import { computeSessions } from "@/lib/session-analysis";
+import { ProjectActivityChart } from "@/components/charts/project-activity-chart";
+import { SessionChart } from "@/components/charts/session-chart";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 import { analyzePrompt, summarizePromptReviews } from "@/lib/prompt-insights";
 
@@ -27,6 +31,23 @@ async function getCurrentUser() {
   return parseSessionToken(sessionToken);
 }
 
+function toDateOnlyString(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getLastNDays(end: Date, days: number) {
+  const base = new Date(end);
+  base.setUTCHours(0, 0, 0, 0);
+
+  const result: string[] = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date(base);
+    d.setUTCDate(d.getUTCDate() - i);
+    result.push(toDateOnlyString(d));
+  }
+  return result;
+}
+
 async function getAnalytics(userId: string | null) {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -34,10 +55,10 @@ async function getAnalytics(userId: string | null) {
     return null;
   }
 
-  try {
-    const client = postgres(connectionString);
-    const db = drizzle(client, { schema });
+  const client = postgres(connectionString);
+  const db = drizzle(client, { schema });
 
+  try {
     // Build user filter condition
     const userFilter = userId
       ? eq(schema.prompts.userId, userId)
@@ -46,6 +67,11 @@ async function getAnalytics(userId: string | null) {
     const userProjectFilter = userId
       ? sql`project_name is not null AND user_id = ${userId}`
       : sql`project_name is not null`;
+
+    const rangeTo = new Date();
+    const rangeFrom = new Date(rangeTo);
+    rangeFrom.setUTCDate(rangeFrom.getUTCDate() - 29);
+    rangeFrom.setUTCHours(0, 0, 0, 0);
 
     const promptInsightsQuery = db
       .select({
@@ -60,7 +86,16 @@ async function getAnalytics(userId: string | null) {
       ? promptInsightsQuery.where(userFilter)
       : promptInsightsQuery;
 
-    const [stats, dailyStats, projectStats, typeStats, recentPrompts, promptSamples] =
+    const dateExpr = sql<string>`date(${schema.prompts.timestamp})`;
+
+    const rangeWhere = and(
+      ...(userFilter ? [userFilter] : []),
+      gte(schema.prompts.timestamp, rangeFrom),
+      lt(schema.prompts.timestamp, rangeTo),
+      eq(schema.prompts.promptType, "user_input")
+    );
+
+    const [stats, dailySeries, projectStats, typeStats, recentPrompts, promptSamples, projectActivityRows, sessionPromptRows] =
       await Promise.all([
       // Overall stats - filtered by user
       db
@@ -76,13 +111,14 @@ async function getAnalytics(userId: string | null) {
 
       db
         .select({
-          date: schema.analyticsDaily.date,
-          count: schema.analyticsDaily.promptCount,
-          tokens: schema.analyticsDaily.totalTokensEst,
+          date: dateExpr,
+          count: sql<number>`count(*)`,
+          tokens: sql<number>`coalesce(sum(coalesce(token_estimate, 0) + coalesce(token_estimate_response, 0)), 0)`,
         })
-        .from(schema.analyticsDaily)
-        .orderBy(schema.analyticsDaily.date)
-        .limit(30),
+        .from(schema.prompts)
+        .where(rangeWhere)
+        .groupBy(dateExpr)
+        .orderBy(dateExpr),
 
       // Top projects - filtered by user
       db
@@ -121,15 +157,118 @@ async function getAnalytics(userId: string | null) {
         .orderBy(desc(schema.prompts.timestamp))
         .limit(5),
       promptInsightsPromise,
+
+      // Project activity (last 30d, user_input only)
+      db
+        .select({
+          project: schema.prompts.projectName,
+          count: sql<number>`count(*)`,
+        })
+        .from(schema.prompts)
+        .where(and(rangeWhere, sql`project_name is not null`))
+        .groupBy(schema.prompts.projectName)
+        .orderBy(desc(sql`count(*)`))
+        .limit(10),
+
+      // Sessions (last 30d, user_input only)
+      db
+        .select({
+          timestamp: schema.prompts.timestamp,
+        })
+        .from(schema.prompts)
+        .where(rangeWhere)
+        .orderBy(schema.prompts.timestamp),
     ]);
 
-    await client.end();
+    // Quality trend is optional: the table may not exist until migrations are applied.
+    let qualityAvailable = false;
+    let qualityAverageScore = 0;
+    let qualityTrend: Array<{ date: string; score: number }> = [];
+
+    try {
+      const [avgRows, trendRows] = await Promise.all([
+        db
+          .select({
+            avgScore: sql<number>`round(avg(${schema.promptReviews.score}))`,
+          })
+          .from(schema.prompts)
+          .innerJoin(
+            schema.promptReviews,
+            eq(schema.promptReviews.promptId, schema.prompts.id)
+          )
+          .where(rangeWhere),
+
+        db
+          .select({
+            date: dateExpr,
+            avgScore: sql<number>`round(avg(${schema.promptReviews.score}))`,
+          })
+          .from(schema.prompts)
+          .innerJoin(
+            schema.promptReviews,
+            eq(schema.promptReviews.promptId, schema.prompts.id)
+          )
+          .where(rangeWhere)
+          .groupBy(dateExpr)
+          .orderBy(dateExpr),
+      ]);
+
+      qualityAvailable = true;
+      qualityAverageScore = Number(avgRows[0]?.avgScore ?? 0);
+      qualityTrend = trendRows.map((r) => ({
+        date: r.date,
+        score: Number(r.avgScore ?? 0),
+      }));
+    } catch (error) {
+      qualityAvailable = false;
+      qualityAverageScore = 0;
+      qualityTrend = [];
+    }
 
     const promptReviews = promptSamples.map((prompt) =>
       analyzePrompt(prompt.promptText)
     );
 
     const promptInsights = summarizePromptReviews(promptReviews);
+
+    // Fill last 30d daily series (even if some days have no data)
+    const dayKeys = getLastNDays(rangeTo, 30);
+    const dailyMap = new Map(
+      dailySeries.map((d) => [d.date, { count: Number(d.count ?? 0), tokens: Number(d.tokens ?? 0) }])
+    );
+
+    const dailyStats = dayKeys.map((date) => ({
+      date,
+      count: dailyMap.get(date)?.count ?? 0,
+      tokens: dailyMap.get(date)?.tokens ?? 0,
+    }));
+
+    // Session analysis (30-minute gap heuristic)
+    const sessions = computeSessions(sessionPromptRows);
+
+    const sessionsCount = sessions.length;
+    const totalSessionPrompts = sessions.reduce((acc, s) => acc + s.promptCount, 0);
+    const totalSessionMinutes = sessions.reduce(
+      (acc, s) => acc + (s.end.getTime() - s.start.getTime()) / 60000,
+      0
+    );
+
+    const sessionSummary = {
+      sessions: sessionsCount,
+      avgPromptsPerSession: sessionsCount ? Math.round(totalSessionPrompts / sessionsCount) : 0,
+      avgSessionMinutes: sessionsCount ? Math.round(totalSessionMinutes / sessionsCount) : 0,
+    };
+
+    const sessionsPerDayMap = new Map<string, number>();
+    for (const s of sessions) {
+      const day = toDateOnlyString(s.start);
+      sessionsPerDayMap.set(day, (sessionsPerDayMap.get(day) ?? 0) + 1);
+    }
+
+    const sessionsPerDay = dayKeys.map((date) => ({
+      date,
+      sessions: sessionsPerDayMap.get(date) ?? 0,
+    }));
 
     return {
       stats: stats[0],
@@ -138,10 +277,25 @@ async function getAnalytics(userId: string | null) {
       typeStats,
       recentPrompts,
       promptInsights,
+      quality: {
+        available: qualityAvailable,
+        averageScore: qualityAverageScore,
+        trend: qualityTrend,
+      },
+      projectActivity: projectActivityRows.map((p) => ({
+        project: p.project ?? "No project",
+        count: Number(p.count ?? 0),
+      })),
+      sessions: {
+        summary: sessionSummary,
+        perDay: sessionsPerDay,
+      },
     };
   } catch (error) {
     console.error("Analytics error:", error);
     return null;
+  } finally {
+    await client.end();
   }
 }
 
@@ -181,7 +335,7 @@ export default async function AnalyticsPage() {
     );
   }
 
-  const { stats, dailyStats, projectStats, typeStats, recentPrompts, promptInsights } =
+  const { stats, dailyStats, projectStats, typeStats, recentPrompts, promptInsights, quality, projectActivity, sessions } =
     data;
 
   const averageScoreLabel = getScoreLabel(promptInsights.averageScore);
@@ -288,6 +442,97 @@ export default async function AnalyticsPage() {
                 tokens: Number(d.tokens ?? 0) 
               }))} 
             />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quality / Projects / Sessions */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <CardTitle className="text-lg text-zinc-100">Quality Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!quality.available ? (
+              <div className="py-8 text-center text-zinc-500 text-sm">
+                Quality trends are unavailable until `prompt_reviews` is created.
+              </div>
+            ) : quality.trend.length === 0 ? (
+              <div className="py-8 text-center text-zinc-500 text-sm">
+                No prompt reviews found for the last 30 days.
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-baseline justify-between">
+                  <div>
+                    <div className="text-xs text-zinc-500">Avg score (30d)</div>
+                    <div className="text-2xl font-semibold text-zinc-100">
+                      {quality.averageScore}
+                    </div>
+                  </div>
+                </div>
+                <QualityTrendChart
+                  data={quality.trend.map((d) => ({ date: d.date, score: d.score }))}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <CardTitle className="text-lg text-zinc-100">Project Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {projectActivity.length === 0 ? (
+              <div className="py-8 text-center text-zinc-500 text-sm">
+                No project activity in the last 30 days.
+              </div>
+            ) : (
+              <ProjectActivityChart
+                data={projectActivity.map((p) => ({
+                  project: p.project,
+                  count: p.count,
+                }))}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <CardTitle className="text-lg text-zinc-100">Sessions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {sessions.summary.sessions === 0 ? (
+              <div className="py-8 text-center text-zinc-500 text-sm">
+                Not enough activity to analyze sessions.
+              </div>
+            ) : (
+              <div>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2">
+                    <div className="text-xs text-zinc-500">Sessions (30d)</div>
+                    <div className="text-zinc-100 font-medium">
+                      {sessions.summary.sessions}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2">
+                    <div className="text-xs text-zinc-500">Avg prompts</div>
+                    <div className="text-zinc-100 font-medium">
+                      {sessions.summary.avgPromptsPerSession}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2">
+                    <div className="text-xs text-zinc-500">Avg minutes</div>
+                    <div className="text-zinc-100 font-medium">
+                      {sessions.summary.avgSessionMinutes}
+                    </div>
+                  </div>
+                </div>
+                <SessionChart data={sessions.perDay} />
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
