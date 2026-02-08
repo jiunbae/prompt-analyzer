@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { TokenUsageChart } from "@/components/charts/token-usage-chart";
 import { QualityTrendChart } from "@/components/charts/quality-trend-chart";
+import { computeSessions } from "@/lib/session-analysis";
 import { ProjectActivityChart } from "@/components/charts/project-activity-chart";
 import { SessionChart } from "@/components/charts/session-chart";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
@@ -243,25 +244,7 @@ async function getAnalytics(userId: string | null) {
     }));
 
     // Session analysis (30-minute gap heuristic)
-    const gapMs = 30 * 60 * 1000;
-    const sessions: Array<{ start: Date; end: Date; promptCount: number }> = [];
-    for (const row of sessionPromptRows) {
-      const ts = new Date(row.timestamp);
-      const last = sessions[sessions.length - 1];
-
-      if (!last) {
-        sessions.push({ start: ts, end: ts, promptCount: 1 });
-        continue;
-      }
-
-      const gap = ts.getTime() - last.end.getTime();
-      if (gap > gapMs) {
-        sessions.push({ start: ts, end: ts, promptCount: 1 });
-      } else {
-        last.end = ts;
-        last.promptCount += 1;
-      }
-    }
+    const sessions = computeSessions(sessionPromptRows);
 
     const sessionsCount = sessions.length;
     const totalSessionPrompts = sessions.reduce((acc, s) => acc + s.promptCount, 0);

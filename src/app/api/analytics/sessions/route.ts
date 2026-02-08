@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUserId, parseDateRange } from "../_helpers";
+import { computeSessions } from "@/lib/session-analysis";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
@@ -43,31 +44,7 @@ export async function GET(request: NextRequest) {
       )
       .orderBy(schema.prompts.timestamp);
 
-    const gapMs = 30 * 60 * 1000;
-
-    const sessions: Array<{
-      start: Date;
-      end: Date;
-      promptCount: number;
-    }> = [];
-
-    for (const row of rows) {
-      const ts = new Date(row.timestamp);
-      const last = sessions[sessions.length - 1];
-
-      if (!last) {
-        sessions.push({ start: ts, end: ts, promptCount: 1 });
-        continue;
-      }
-
-      const gap = ts.getTime() - last.end.getTime();
-      if (gap > gapMs) {
-        sessions.push({ start: ts, end: ts, promptCount: 1 });
-      } else {
-        last.end = ts;
-        last.promptCount += 1;
-      }
-    }
+    const sessions = computeSessions(rows);
 
     const sessionsCount = sessions.length;
     const totalPrompts = sessions.reduce((acc, s) => acc + s.promptCount, 0);
