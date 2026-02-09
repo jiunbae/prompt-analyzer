@@ -42,7 +42,12 @@ jobs:
       - name: Update package.json version
         run: |
           cd packages/omp-cli
-          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+          node -e "
+            const pkg = require('./package.json');
+            pkg.version = '${{ steps.version.outputs.version }}';
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('Set version to ' + pkg.version);
+          "
 
       - name: Build CLI package
         run: |
@@ -60,7 +65,7 @@ jobs:
       - name: Publish to npm
         run: |
           cd packages/omp-cli
-          npm publish --access public --provenance
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
