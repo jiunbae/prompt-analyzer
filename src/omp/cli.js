@@ -561,7 +561,7 @@ async function main() {
         console.log("Interactive setup wizard for Oh My Prompt.");
         console.log("");
         console.log("Options:");
-        console.log("  --server <url>    Server URL (default: https://prompt.jiun.dev)");
+        console.log("  --server <url>    Server URL (default: https://your-server.example.com)");
         console.log("  --token <token>   Authentication token");
         console.log("  --device <name>   Device name (default: hostname)");
         console.log("  --hooks <targets> Comma-separated: claude,codex,all,none");

@@ -128,7 +128,7 @@ $ omp setup
 
   ? Server URL: https://your-server.com
   ? API Token: ********-****-****-****-************
-  ? Device name: jiun-mbp
+  ? Device name: my-laptop
   ? Install Claude Code hook? Yes
   ? Install Codex hook? Yes
 
@@ -303,7 +303,7 @@ docker run -p 3000:3000 \
 
 ### Kubernetes
 
-See the [IaC manifests](https://github.com/jiunbae/IaC/tree/main/kubernetes/apps/oh-my-prompt) for production deployment with ArgoCD.
+Example k8s manifests are in `k8s/`. Update secrets and ingress for your environment.
 
 ### Connect CLI → Server
 

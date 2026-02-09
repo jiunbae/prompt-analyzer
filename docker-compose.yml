@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: prompt
-      POSTGRES_PASSWORD: prompt123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}  # Change in production
       POSTGRES_DB: prompts
     ports:
       - "5432:5432"

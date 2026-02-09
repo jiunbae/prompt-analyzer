@@ -3,7 +3,7 @@
 # No dependencies other than curl, openssl, and python3 (standard on macOS)
 
 # Config
-MINIO_ENDPOINT="https://minio.jiun.dev"
+MINIO_ENDPOINT="https://minio.example.com"
 MINIO_BUCKET="oh-my-prompt"
 MINIO_ACCESS_KEY="$1"
 MINIO_SECRET_KEY="$2"
@@ -47,7 +47,7 @@ import json, hashlib, datetime, os, subprocess, hmac, urllib.parse
 access_key = os.environ.get("MINIO_ACCESS_KEY_ENV")
 secret_key = os.environ.get("MINIO_SECRET_KEY_ENV")
 bucket = "oh-my-prompt"
-endpoint = "https://minio.jiun.dev"
+endpoint = "https://minio.example.com"
 token = os.environ.get("USER_TOKEN_ENV")
 dry_run = os.environ.get("DRY_RUN_ENV") == "--dry-run"
 file_path = os.environ.get("FILE_PATH")

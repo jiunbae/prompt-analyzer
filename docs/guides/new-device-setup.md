@@ -6,7 +6,7 @@ Install the `omp` CLI on a new machine to capture and sync your AI coding prompt
 
 - **Node.js 20+** (via nvm or brew)
 - **Claude Code** or **Codex** installed
-- Access to MinIO storage (e.g., `minio.jiun.dev`)
+- Access to MinIO storage (e.g., `minio.example.com`)
 - Your **user token** (from the web dashboard at Settings)
 
 ## Step 1: Install Node.js
@@ -69,7 +69,7 @@ cat > ~/.config/oh-my-prompt/config.json << 'EOF'
     },
     "minio": {
       "bucket": "claude-prompts",
-      "endpoint": "minio.jiun.dev",
+      "endpoint": "minio.example.com",
       "accessKey": "YOUR_MINIO_ACCESS_KEY",
       "secretKey": "YOUR_MINIO_SECRET_KEY",
       "useSSL": true

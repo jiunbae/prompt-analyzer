@@ -5,7 +5,7 @@ const https = require("https");
  * Validate that the server is reachable and the token is accepted.
  * Sends a lightweight POST to /api/sync/upload with an empty records array.
  *
- * @param {string} serverUrl - e.g. "https://prompt.jiun.dev"
+ * @param {string} serverUrl - e.g. "https://your-server.example.com"
  * @param {string} token - The user's auth token
  * @param {string} deviceId - Device identifier
  * @param {object} [options] - { timeout: 10000 }

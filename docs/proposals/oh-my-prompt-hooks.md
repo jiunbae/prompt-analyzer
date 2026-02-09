@@ -28,7 +28,7 @@
   "source": "claude-code",
   "session_id": "abc123",
   "project": "my-repo",
-  "cwd": "/Users/jiun/workspace/my-repo",
+  "cwd": "/home/user/projects/my-repo",
   "role": "user",
   "text": "...prompt text...",
   "response_text": "...optional...",

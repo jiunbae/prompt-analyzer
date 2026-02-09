@@ -207,7 +207,7 @@ async function runSetup(options) {
     }
 
     // --- Step 1: Server URL ---
-    const defaultUrl = config.server.url || "https://prompt.jiun.dev";
+    const defaultUrl = config.server.url || "https://your-server.example.com";
     let serverUrl;
     if (options.server) {
       serverUrl = normalizeUrl(options.server);

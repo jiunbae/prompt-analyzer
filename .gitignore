@@ -42,6 +42,9 @@ yarn-error.log*
 # internal docs
 .context/
 
+# CLI build artifacts (rebuilt from src/omp/)
+packages/omp-cli/lib/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

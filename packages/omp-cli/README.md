@@ -80,7 +80,7 @@ omp status
 
 Expected output:
 ```
-Server: https://prompt.jiun.dev (or not configured)
+Server: https://your-server.example.com (or not configured)
 Token: configured / not configured
 Storage: sqlite
 SQLite: /Users/you/.omp/prompts.db
@@ -142,7 +142,7 @@ omp analyze --stdin < prompt.txt   # Analyze from stdin
 ```bash
 omp config get                     # Show full config
 omp config get server.url          # Get specific value
-omp config set server.url https://prompt.jiun.dev
+omp config set server.url https://your-server.example.com
 omp config set server.token YOUR_TOKEN
 omp config validate                # Check config validity
 ```
@@ -169,7 +169,7 @@ Config file: `~/.omp/config.json`
 ```json
 {
   "server": {
-    "url": "https://prompt.jiun.dev",
+    "url": "https://your-server.example.com",
     "token": "your-api-token"
   }
 }
@@ -177,7 +177,7 @@ Config file: `~/.omp/config.json`
 
 Or via CLI:
 ```bash
-omp config set server.url https://prompt.jiun.dev
+omp config set server.url https://your-server.example.com
 omp config set server.token YOUR_TOKEN
 ```
 
@@ -213,7 +213,7 @@ omp config set server.token YOUR_TOKEN
 Override config with env vars:
 
 ```bash
-export OMP_SERVER_URL="https://prompt.jiun.dev"
+export OMP_SERVER_URL="https://your-server.example.com"
 export OMP_SERVER_TOKEN="your-token"
 export OMP_STORAGE_TYPE="sqlite"
 export OMP_SQLITE_PATH="/custom/path/prompts.db"
@@ -313,7 +313,7 @@ Generates:
 1. Get an API token from your Oh My Prompt server
 2. Configure sync:
    ```bash
-   omp config set server.url https://prompt.jiun.dev
+   omp config set server.url https://your-server.example.com
    omp config set server.token YOUR_TOKEN
    ```
 
@@ -392,7 +392,7 @@ omp import codex-history --dry-run  # Preview
 
 2. Test connectivity:
    ```bash
-   curl -H "Authorization: Bearer YOUR_TOKEN" https://prompt.jiun.dev/api/health
+   curl -H "Authorization: Bearer YOUR_TOKEN" https://your-server.example.com/api/health
    ```
 
 3. Force sync:

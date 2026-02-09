@@ -22,9 +22,15 @@ spec:
             - containerPort: 5432
           env:
             - name: POSTGRES_USER
-              value: "prompt"
+              valueFrom:
+                secretKeyRef:
+                  name: prompt-db-secret
+                  key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
-              value: "prompt123"
+              valueFrom:
+                secretKeyRef:
+                  name: prompt-db-secret
+                  key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               value: "prompts"
           volumeMounts:

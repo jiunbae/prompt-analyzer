@@ -1,6 +1,9 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 const SALT_ROUNDS = 12;
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 
 /**
  * Hash a password using bcrypt
@@ -35,33 +38,71 @@ export interface SessionPayload {
 }
 
 /**
- * Create a session token (base64 encoded JSON)
+ * Create a signed session token (HMAC-SHA256)
  * @param payload - Session data
- * @returns Encoded session token
+ * @returns Signed session token (payload.signature)
  */
 export function createSessionToken(payload: SessionPayload): string {
   const data = JSON.stringify({
     ...payload,
     iat: Date.now(),
   });
-  return Buffer.from(data).toString("base64");
+  const encoded = Buffer.from(data).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", SESSION_SECRET)
+    .update(encoded)
+    .digest("base64url");
+  return `${encoded}.${signature}`;
 }
 
 /**
- * Parse a session token
- * @param token - Encoded session token
- * @returns Session payload or null if invalid
+ * Parse and verify a signed session token
+ * @param token - Signed session token
+ * @returns Session payload or null if invalid/tampered
  */
 export function parseSessionToken(token: string): SessionPayload | null {
   try {
-    const data = Buffer.from(token, "base64").toString("utf-8");
+    const dotIndex = token.lastIndexOf(".");
+    if (dotIndex === -1) {
+      // Try legacy unsigned base64 token (migration path)
+      return parseLegacyToken(token);
+    }
+
+    const encoded = token.slice(0, dotIndex);
+    const signature = token.slice(dotIndex + 1);
+
+    const expectedSig = crypto
+      .createHmac("sha256", SESSION_SECRET)
+      .update(encoded)
+      .digest("base64url");
+
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+      return null;
+    }
+
+    const data = Buffer.from(encoded, "base64url").toString("utf-8");
     const parsed = JSON.parse(data);
 
-    // Validate required fields
     if (!parsed.userId || !parsed.email || !parsed.token) {
       return null;
     }
 
+    return {
+      userId: parsed.userId,
+      email: parsed.email,
+      token: parsed.token,
+      isAdmin: parsed.isAdmin ?? false,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseLegacyToken(token: string): SessionPayload | null {
+  try {
+    const data = Buffer.from(token, "base64").toString("utf-8");
+    const parsed = JSON.parse(data);
+    if (!parsed.userId || !parsed.email || !parsed.token) return null;
     return {
       userId: parsed.userId,
       email: parsed.email,

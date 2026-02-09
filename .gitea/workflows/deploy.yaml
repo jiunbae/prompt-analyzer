@@ -6,10 +6,10 @@ on:
       - main
 
 env:
-  REGISTRY: registry.jiun.dev
-  IMAGE_NAME: prompt-analyzer
-  IAC_REPO: jiunbae/IaC
-  APP_PATH: kubernetes/apps/prompt-analyzer
+  REGISTRY: your-registry.example.com  # TODO: Your container registry
+  IMAGE_NAME: oh-my-prompt             # TODO: Your image name
+  IAC_REPO: your-org/your-iac-repo     # TODO: Your IaC repository
+  APP_PATH: kubernetes/apps/oh-my-prompt
 
 jobs:
   build:
@@ -54,8 +54,8 @@ jobs:
       - name: Commit and push IaC change
         run: |
           cd iac
-          git config user.name "Gitea CI"
-          git config user.email "ci@jiun.dev"
+          git config user.name "CI Bot"
+          git config user.email "ci@example.com"
           git add ${{ env.APP_PATH }}/kustomization.yaml
           git diff --staged --quiet || git commit -m "chore(oh-my-prompt): update image to ${{ gitea.sha }}"
           git push

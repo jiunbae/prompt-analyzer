@@ -554,6 +554,29 @@ async function main() {
   const { command, options, positional } = parseArgs(process.argv.slice(2));
 
   switch (command) {
+    case "setup": {
+      if (options.help) {
+        console.log("Usage: omp setup [OPTIONS]");
+        console.log("");
+        console.log("Interactive setup wizard for Oh My Prompt.");
+        console.log("");
+        console.log("Options:");
+        console.log("  --server <url>    Server URL (default: https://your-server.example.com)");
+        console.log("  --token <token>   Authentication token");
+        console.log("  --device <name>   Device name (default: hostname)");
+        console.log("  --hooks <targets> Comma-separated: claude,codex,all,none");
+        console.log("  --no-hooks        Skip hook installation");
+        console.log("  --skip-validate   Skip server token validation");
+        console.log("  --yes, -y         Non-interactive mode, accept all defaults");
+        console.log("  --dry-run         Show what would be done without making changes");
+        console.log("  --json            Output results as JSON");
+        break;
+      }
+      const { runSetup } = require("./setup");
+      const setupResult = await runSetup(options);
+      if (!setupResult.ok) process.exitCode = 1;
+      break;
+    }
     case "install": {
       const installed = await handleInstall(options);
       if (options.json) {
@@ -656,7 +679,7 @@ async function main() {
     default:
       console.log("Oh My Prompt CLI");
       console.log(
-        "Commands: install, uninstall, status, stats, report, analyze, export, sync, ingest, config, import, db, doctor"
+        "Commands: setup, install, uninstall, status, stats, report, analyze, export, sync, ingest, config, import, db, doctor"
       );
       console.log("Use --help with each command for options.");
       process.exitCode = 2;
