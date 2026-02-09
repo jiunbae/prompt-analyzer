@@ -35,16 +35,29 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing version: $VERSION"
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          echo "tag=$TAG_VERSION" >> $GITHUB_OUTPUT
+
+          # Convert date-based tag (YYYY.M.D.N) to semver (YYYY.MDD.N)
+          # e.g., 2026.2.9.1 → 2026.209.1
+          NPM_VERSION=$(echo "$TAG_VERSION" | node -e "
+            const parts = require('fs').readFileSync('/dev/stdin','utf8').trim().split('.');
+            if (parts.length === 4) {
+              const [y, m, d, n] = parts;
+              console.log(y + '.' + m + d.padStart(2,'0') + '.' + n);
+            } else {
+              console.log(parts.join('.'));
+            }
+          ")
+          echo "npm=$NPM_VERSION" >> $GITHUB_OUTPUT
+          echo "Tag: $TAG_VERSION → npm: $NPM_VERSION"
 
       - name: Update package.json version
         run: |
           cd packages/omp-cli
           node -e "
             const pkg = require('./package.json');
-            pkg.version = '${{ steps.version.outputs.version }}';
+            pkg.version = '${{ steps.version.outputs.npm }}';
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
             console.log('Set version to ' + pkg.version);
           "
@@ -73,15 +86,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Release ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.tag }}
           body: |
             ## Installation
             ```bash
-            npm install -g oh-my-prompt@${{ steps.version.outputs.version }}
+            npm install -g oh-my-prompt@${{ steps.version.outputs.npm }}
             ```
 
-            See [CHANGELOG.md](CHANGELOG.md) for details.
+            npm version: `${{ steps.version.outputs.npm }}`
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
