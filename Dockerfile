@@ -35,6 +35,17 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# Copy migration files, migrate script, and entrypoint
+COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/scripts/migrate.js ./migrate.js
+COPY --from=builder /app/scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+
+# Copy postgres driver from builder (needed for migration script)
+COPY --from=builder /app/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres ./node_modules/postgres
+
+RUN chmod +x ./docker-entrypoint.sh && \
+    chown -R nextjs:nodejs /app
+
 USER nextjs
 
 EXPOSE 3000
@@ -42,4 +53,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

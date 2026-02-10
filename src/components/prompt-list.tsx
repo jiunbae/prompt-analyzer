@@ -101,20 +101,7 @@ export function PromptList({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <form onSubmit={handleSearch} className="flex gap-2 w-full sm:w-auto">
-          <Input
-            type="search"
-            placeholder="Search prompts..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full sm:w-64"
-          />
-          <Button type="submit" variant="outline">
-            Search
-          </Button>
-        </form>
-
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-end">
         <div className="flex gap-2">
           <div className="flex rounded-md border border-zinc-700">
             <button

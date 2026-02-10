@@ -119,6 +119,26 @@ const adminNavItems: NavItem[] = [
     ),
   },
   {
+    href: "/admin/sessions",
+    label: "Sessions",
+    adminOnly: true,
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+        />
+      </svg>
+    ),
+  },
+  {
     href: "/admin/analytics",
     label: "Insights",
     adminOnly: true,
@@ -160,27 +180,6 @@ const adminNavItems: NavItem[] = [
   },
 ];
 
-interface SyncStatusProps {
-  status: "connected" | "syncing" | "error" | "idle";
-}
-
-function SyncStatus({ status }: SyncStatusProps) {
-  const statusConfig = {
-    connected: { color: "bg-green-500", label: "Connected" },
-    syncing: { color: "bg-blue-500 animate-pulse", label: "Syncing..." },
-    error: { color: "bg-red-500", label: "Error" },
-    idle: { color: "bg-zinc-500", label: "Idle" },
-  };
-
-  const config = statusConfig[status];
-
-  return (
-    <div className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-400">
-      <span className={`h-2 w-2 rounded-full ${config.color}`} />
-      <span>{config.label}</span>
-    </div>
-  );
-}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -253,10 +252,6 @@ export function Sidebar() {
           </>
         )}
       </nav>
-
-      <div className="border-t border-zinc-800">
-        <SyncStatus status="connected" />
-      </div>
 
       {/* User Info Section */}
       <div className="border-t border-zinc-800 p-4">

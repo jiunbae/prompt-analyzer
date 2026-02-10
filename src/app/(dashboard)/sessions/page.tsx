@@ -1,4 +1,5 @@
 import { SessionCard } from "@/components/session-card";
+import { SessionFilters } from "@/components/session-filters";
 import { cookies } from "next/headers";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 import Link from "next/link";
@@ -7,7 +8,9 @@ export const dynamic = "force-dynamic";
 
 interface SearchParams {
   page?: string;
+  search?: string;
   project?: string;
+  source?: string;
   from?: string;
   to?: string;
 }
@@ -34,12 +37,12 @@ interface SessionRow {
 
 async function getSessions(params: SearchParams, userId: string) {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return { sessions: [], totalCount: 0 };
+  if (!connectionString) return { sessions: [], totalCount: 0, projects: [], sources: [] };
 
   const { drizzle } = await import("drizzle-orm/postgres-js");
   const postgresModule = await import("postgres");
   const schema = await import("@/db/schema");
-  const { eq, and, gte, lte, sql } = await import("drizzle-orm");
+  const { eq, and, gte, lte, sql, desc } = await import("drizzle-orm");
 
   const client = postgresModule.default(connectionString);
   const db = drizzle(client, { schema });
@@ -54,17 +57,29 @@ async function getSessions(params: SearchParams, userId: string) {
   ];
 
   if (params.project) conditions.push(eq(schema.prompts.projectName, params.project));
+  if (params.source) conditions.push(eq(schema.prompts.source, params.source));
   if (params.from) conditions.push(gte(schema.prompts.timestamp, new Date(params.from)));
   if (params.to) {
     const toDate = new Date(params.to);
     toDate.setHours(23, 59, 59, 999);
     conditions.push(lte(schema.prompts.timestamp, toDate));
   }
+  if (params.search) {
+    conditions.push(
+      sql`${schema.prompts.searchVector} @@ websearch_to_tsquery('english', ${params.search})`
+    );
+  }
 
   const whereClause = and(...conditions);
 
+  // Base conditions for filter options (user's sessions only)
+  const baseConditions = and(
+    eq(schema.prompts.userId, userId),
+    sql`${schema.prompts.sessionId} IS NOT NULL`,
+  );
+
   try {
-    const [sessionsResult, countResult] = await Promise.all([
+    const [sessionsResult, countResult, projectsResult, sourcesResult] = await Promise.all([
       db.execute(sql`
         SELECT
           ${schema.prompts.sessionId} as session_id,
@@ -88,6 +103,18 @@ async function getSessions(params: SearchParams, userId: string) {
         FROM ${schema.prompts}
         WHERE ${whereClause}
       `),
+      db
+        .select({ name: schema.prompts.projectName, count: sql<number>`count(distinct ${schema.prompts.sessionId})` })
+        .from(schema.prompts)
+        .where(and(baseConditions, sql`${schema.prompts.projectName} IS NOT NULL`))
+        .groupBy(schema.prompts.projectName)
+        .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`)),
+      db
+        .select({ name: schema.prompts.source, count: sql<number>`count(distinct ${schema.prompts.sessionId})` })
+        .from(schema.prompts)
+        .where(and(baseConditions, sql`${schema.prompts.source} IS NOT NULL`))
+        .groupBy(schema.prompts.source)
+        .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`)),
     ]);
 
     await client.end();
@@ -99,11 +126,13 @@ async function getSessions(params: SearchParams, userId: string) {
     return {
       sessions: sRows as SessionRow[],
       totalCount: Number((cRows[0] as Record<string, unknown>)?.count ?? 0),
+      projects: projectsResult.map((p) => ({ name: p.name ?? "", count: Number(p.count) })),
+      sources: sourcesResult.map((s) => ({ name: s.name ?? "", count: Number(s.count) })),
     };
   } catch (error) {
     console.error("Sessions query error:", error);
     await client.end();
-    return { sessions: [], totalCount: 0 };
+    return { sessions: [], totalCount: 0, projects: [], sources: [] };
   }
 }
 
@@ -116,10 +145,22 @@ export default async function SessionsPage({
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const { sessions, totalCount } = await getSessions(params, user.userId);
+  const { sessions, totalCount, projects, sources } = await getSessions(params, user.userId);
   const currentPage = parseInt(params.page ?? "1", 10);
   const pageSize = 20;
   const totalPages = Math.ceil(totalCount / pageSize);
+
+  const buildPageUrl = (page: number) => {
+    const p = new URLSearchParams();
+    if (page > 1) p.set("page", String(page));
+    if (params.search) p.set("search", params.search);
+    if (params.project) p.set("project", params.project);
+    if (params.source) p.set("source", params.source);
+    if (params.from) p.set("from", params.from);
+    if (params.to) p.set("to", params.to);
+    const qs = p.toString();
+    return `/sessions${qs ? `?${qs}` : ""}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -129,6 +170,16 @@ export default async function SessionsPage({
           Browse your Claude Code sessions ({totalCount} total)
         </p>
       </div>
+
+      <SessionFilters
+        projects={projects}
+        sources={sources}
+        currentSearch={params.search}
+        currentProject={params.project}
+        currentSource={params.source}
+        currentFrom={params.from}
+        currentTo={params.to}
+      />
 
       {sessions.length === 0 ? (
         <div className="text-center py-12 text-zinc-500">
@@ -159,7 +210,7 @@ export default async function SessionsPage({
         <div className="flex items-center justify-center gap-2">
           {currentPage > 1 && (
             <Link
-              href={`/sessions?page=${currentPage - 1}${params.project ? `&project=${params.project}` : ""}${params.from ? `&from=${params.from}` : ""}${params.to ? `&to=${params.to}` : ""}`}
+              href={buildPageUrl(currentPage - 1)}
               className="px-3 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
             >
               Previous
@@ -170,7 +221,7 @@ export default async function SessionsPage({
           </span>
           {currentPage < totalPages && (
             <Link
-              href={`/sessions?page=${currentPage + 1}${params.project ? `&project=${params.project}` : ""}${params.from ? `&from=${params.from}` : ""}${params.to ? `&to=${params.to}` : ""}`}
+              href={buildPageUrl(currentPage + 1)}
               className="px-3 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
             >
               Next
