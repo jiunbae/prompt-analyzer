@@ -6,7 +6,6 @@ Install the `omp` CLI on a new machine to capture and sync your AI coding prompt
 
 - **Node.js 20+** (via nvm or brew)
 - **Claude Code** or **Codex** installed
-- Access to MinIO storage (e.g., `minio.example.com`)
 - Your **user token** (from the web dashboard at Settings)
 
 ## Step 1: Install Node.js
@@ -39,7 +38,7 @@ rsync -avz --exclude='node_modules' --exclude='.next' --exclude='.git' \
 
 ```bash
 cd ~/workspace/oh-my-prompt
-npm install --legacy-peer-deps better-sqlite3 minio
+npm install --legacy-peer-deps better-sqlite3
 ```
 
 ## Step 4: Make `omp` Globally Available
@@ -63,16 +62,8 @@ mkdir -p ~/.config/oh-my-prompt
 cat > ~/.config/oh-my-prompt/config.json << 'EOF'
 {
   "storage": {
-    "type": "sqlite",
     "sqlite": {
       "path": "~/.config/oh-my-prompt/prompts.db"
-    },
-    "minio": {
-      "bucket": "claude-prompts",
-      "endpoint": "minio.example.com",
-      "accessKey": "YOUR_MINIO_ACCESS_KEY",
-      "secretKey": "YOUR_MINIO_SECRET_KEY",
-      "useSSL": true
     }
   },
   "capture": {
@@ -103,9 +94,7 @@ Replace the following values:
 
 | Placeholder | Where to find it |
 |-------------|------------------|
-| `YOUR_MINIO_ACCESS_KEY` | MinIO admin console or your admin |
-| `YOUR_MINIO_SECRET_KEY` | MinIO admin console or your admin |
-| `YOUR_USER_TOKEN` | Web dashboard → Settings → User Token |
+| `YOUR_USER_TOKEN` | Web dashboard -> Settings -> API Token |
 | `YOUR_DEVICE_NAME` | A name for this machine (e.g., `jiun-mbp`) |
 
 ## Step 6: Initialize Database
@@ -140,10 +129,10 @@ Expected output: `Doctor: OK`
 
 Once hooks are installed, prompts are captured automatically when you use Claude Code or Codex.
 
-### Sync to MinIO
+### Sync to Server
 
 ```bash
-# Upload local prompts to MinIO
+# Upload local prompts to the server
 omp sync
 ```
 
@@ -188,14 +177,6 @@ Run `omp db migrate` to initialize the database.
 
 Run `omp install claude` to install the hook.
 
-### Sync fails with SSL error
-
-Verify your MinIO endpoint and `useSSL` setting match. If using a self-signed cert, you may need:
-
-```bash
-NODE_TLS_REJECT_UNAUTHORIZED=0 omp sync
-```
-
 ## Architecture
 
 ```
@@ -206,13 +187,6 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 omp sync
 
 ~/.claude/hooks/
 └── prompt-logger.sh     # Claude Code hook (auto-installed)
-
-MinIO (remote):
-└── claude-prompts/
-    └── {user-token}/
-        └── YYYY/MM/DD/
-            ├── {hash}.json            # Input prompt
-            └── {hash}_output.json     # Response
 ```
 
 ## Quick Reference
@@ -223,7 +197,7 @@ MinIO (remote):
 | `omp install codex` | Install Codex hook |
 | `omp uninstall claude` | Remove Claude Code hook |
 | `omp db migrate` | Run database migrations |
-| `omp sync` | Upload local data to MinIO |
+| `omp sync` | Upload local data to server |
 | `omp stats` | Show prompt statistics |
 | `omp report` | Generate detailed report |
 | `omp doctor` | Check installation health |

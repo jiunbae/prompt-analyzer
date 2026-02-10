@@ -84,7 +84,6 @@ Local SQLite → server API<br/>Works offline, syncs when ready
                                                       │
                                                ┌──────┴──────┐
                                                │  PostgreSQL  │
-                                               │  MinIO       │
                                                │  Analytics   │
                                                └──────────────┘
                                                       │
@@ -295,11 +294,6 @@ docker run -p 3000:3000 \
 | Variable | Required | Description |
 |:---------|:--------:|:------------|
 | `DATABASE_URL` | **Yes** | PostgreSQL connection string |
-| `MINIO_ENDPOINT` | No | MinIO/S3 endpoint (without protocol) |
-| `MINIO_ACCESS_KEY` | No | MinIO access key |
-| `MINIO_SECRET_KEY` | No | MinIO secret key |
-| `MINIO_BUCKET` | No | Bucket name (default: `oh-my-prompt`) |
-| `MINIO_USE_SSL` | No | Use SSL (default: `true`) |
 
 ### Kubernetes
 
@@ -342,10 +336,6 @@ oh-my-prompt/
 <tr>
 <td><b>Database</b></td>
 <td>PostgreSQL · Drizzle ORM</td>
-</tr>
-<tr>
-<td><b>Storage</b></td>
-<td>MinIO (S3-compatible)</td>
 </tr>
 <tr>
 <td><b>CLI</b></td>

@@ -63,7 +63,7 @@ const prompts = pgTable("prompts", {
   id: uuid("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  minioKey: varchar("minio_key", { length: 255 }).notNull().unique(),
+  eventKey: varchar("event_key", { length: 255 }).notNull().unique(),
   timestamp: timestamp("timestamp", { withTimezone: true }).notNull(),
   workingDirectory: varchar("working_directory", { length: 500 }),
   promptLength: integer("prompt_length").notNull(),

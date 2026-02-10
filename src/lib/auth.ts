@@ -33,7 +33,7 @@ export async function verifyPassword(
 export interface SessionPayload {
   userId: string;
   email: string;
-  token: string; // User's MinIO token
+  token: string; // User's API token
   isAdmin: boolean;
 }
 

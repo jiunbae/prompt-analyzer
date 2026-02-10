@@ -8,7 +8,7 @@ data:
     -- Create prompts table
     CREATE TABLE IF NOT EXISTS prompts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      minio_key VARCHAR(255) NOT NULL UNIQUE,
+      event_key VARCHAR(255) NOT NULL UNIQUE,
       timestamp TIMESTAMPTZ NOT NULL,
       working_directory VARCHAR(500),
       prompt_length INTEGER NOT NULL,
@@ -25,7 +25,7 @@ data:
     CREATE INDEX IF NOT EXISTS idx_prompts_timestamp ON prompts(timestamp);
     CREATE INDEX IF NOT EXISTS idx_prompts_project ON prompts(project_name);
     CREATE INDEX IF NOT EXISTS idx_prompts_type ON prompts(prompt_type);
-    CREATE INDEX IF NOT EXISTS idx_prompts_minio_key ON prompts(minio_key);
+    CREATE INDEX IF NOT EXISTS idx_prompts_event_key ON prompts(event_key);
 
     -- Create tags table
     CREATE TABLE IF NOT EXISTS tags (
@@ -51,16 +51,4 @@ data:
       unique_projects INTEGER DEFAULT 0,
       avg_prompt_length NUMERIC(10, 2) DEFAULT 0,
       updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    -- Create minio_sync_log table
-    CREATE TABLE IF NOT EXISTS minio_sync_log (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      started_at TIMESTAMPTZ DEFAULT NOW(),
-      completed_at TIMESTAMPTZ,
-      status VARCHAR(20) DEFAULT 'running',
-      files_processed INTEGER DEFAULT 0,
-      files_added INTEGER DEFAULT 0,
-      files_skipped INTEGER DEFAULT 0,
-      error_message TEXT
     );

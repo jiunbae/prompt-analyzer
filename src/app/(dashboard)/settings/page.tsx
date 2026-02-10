@@ -1,26 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useUser } from "@/contexts/user-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SyncStatus } from "@/components/sync-status";
-import { SyncHistory } from "@/components/sync-history";
 
 export default function SettingsPage() {
   const { user, loading, refetch } = useUser();
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [minioConfig, setMinioConfig] = useState<{ endpoint: string; bucket: string } | null>(null);
-
-  useEffect(() => {
-    fetch("/api/config/minio")
-      .then((res) => res.json())
-      .then((data) => setMinioConfig(data))
-      .catch(() => setMinioConfig({ endpoint: "", bucket: "" }));
-  }, []);
 
   const regenerateToken = async () => {
     setRegenerating(true);
@@ -122,16 +112,6 @@ export default function SettingsPage() {
                   <pre className="bg-zinc-900 p-3 rounded text-xs overflow-x-auto">
 {`omp setup`}
                   </pre>
-                  {minioConfig?.endpoint && (
-                    <>
-                      <p className="font-medium text-zinc-300 mb-2 mt-4">Manual Configuration</p>
-                      <pre className="bg-zinc-900 p-3 rounded text-xs overflow-x-auto">
-{`export OH_MY_PROMPT_TOKEN="${user.token}"
-export OH_MY_PROMPT_ENDPOINT="${minioConfig.endpoint}"
-export OH_MY_PROMPT_BUCKET="${minioConfig.bucket}"`}
-                      </pre>
-                    </>
-                  )}
                 </div>
 
                 {/* Regenerate Token */}
@@ -187,22 +167,6 @@ export OH_MY_PROMPT_BUCKET="${minioConfig.bucket}"`}
             ) : (
               <p className="text-zinc-500">No token available</p>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Data Sync</CardTitle>
-            <CardDescription>
-              Sync prompts to the server
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <SyncStatus />
-            <div className="pt-4 border-t border-zinc-800">
-              <h4 className="text-sm font-medium text-zinc-300 mb-3">Recent Syncs</h4>
-              <SyncHistory limit={5} />
-            </div>
           </CardContent>
         </Card>
 

@@ -33,7 +33,7 @@ export const users = pgTable(
     token: uuid("token")
       .notNull()
       .unique()
-      .default(sql`gen_random_uuid()`), // for MinIO path
+      .default(sql`gen_random_uuid()`), // for API auth
     name: varchar("name", { length: 100 }),
     isAdmin: boolean("is_admin").default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -62,7 +62,7 @@ export const prompts = pgTable(
     id: uuid("id")
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    minioKey: varchar("minio_key", { length: 255 }).notNull().unique(),
+    eventKey: varchar("event_key", { length: 255 }).notNull().unique(),
     timestamp: timestamp("timestamp", { withTimezone: true }).notNull(),
     workingDirectory: varchar("working_directory", { length: 500 }),
     promptLength: integer("prompt_length").notNull(),
@@ -93,7 +93,7 @@ export const prompts = pgTable(
     index("idx_prompts_timestamp").on(table.timestamp),
     index("idx_prompts_project").on(table.projectName),
     index("idx_prompts_type").on(table.promptType),
-    index("idx_prompts_minio_key").on(table.minioKey),
+    index("idx_prompts_event_key").on(table.eventKey),
     index("idx_prompts_user").on(table.userId),
     index("idx_prompts_session_id").on(table.sessionId),
     index("idx_prompts_search_vector").using("gin", table.searchVector),
@@ -135,43 +135,10 @@ export const analyticsDaily = pgTable("analytics_daily", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-// MinIO sync log table
-export const minioSyncLog = pgTable("minio_sync_log", {
-  id: uuid("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow(),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  status: varchar("status", { length: 20 }).default("running"),
-  filesProcessed: integer("files_processed").default(0),
-  filesAdded: integer("files_added").default(0),
-  filesSkipped: integer("files_skipped").default(0),
-  errorMessage: text("error_message"),
-  // Multi-user sync management columns
-  userId: uuid("user_id").references(() => users.id),
-  syncType: varchar("sync_type", { length: 20 }), // "manual", "auto", or "cron"
-});
-
-// Sync settings table (multi-user sync management)
-export const syncSettings = pgTable("sync_settings", {
-  id: uuid("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  userId: uuid("user_id")
-    .references(() => users.id)
-    .unique(),
-  autoSyncEnabled: boolean("auto_sync_enabled").default(false),
-  syncIntervalMinutes: integer("sync_interval_minutes").default(10),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
-
 // Relations
-export const usersRelations = relations(users, ({ one, many }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
   prompts: many(prompts),
   allowedEmails: many(allowedEmails),
-  syncSettings: one(syncSettings),
-  syncLogs: many(minioSyncLog),
 }));
 
 export const allowedEmailsRelations = relations(allowedEmails, ({ one }) => ({
@@ -204,20 +171,6 @@ export const promptTagsRelations = relations(promptTags, ({ one }) => ({
   }),
 }));
 
-export const syncSettingsRelations = relations(syncSettings, ({ one }) => ({
-  user: one(users, {
-    fields: [syncSettings.userId],
-    references: [users.id],
-  }),
-}));
-
-export const minioSyncLogRelations = relations(minioSyncLog, ({ one }) => ({
-  user: one(users, {
-    fields: [minioSyncLog.userId],
-    references: [users.id],
-  }),
-}));
-
 // Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -229,6 +182,3 @@ export type Tag = typeof tags.$inferSelect;
 export type NewTag = typeof tags.$inferInsert;
 export type PromptTag = typeof promptTags.$inferSelect;
 export type AnalyticsDaily = typeof analyticsDaily.$inferSelect;
-export type MinioSyncLog = typeof minioSyncLog.$inferSelect;
-export type SyncSettings = typeof syncSettings.$inferSelect;
-export type NewSyncSettings = typeof syncSettings.$inferInsert;

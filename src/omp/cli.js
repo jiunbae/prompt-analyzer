@@ -13,7 +13,7 @@ const { getQueueStats } = require("./queue");
 const { loadState } = require("./state");
 const { getStats } = require("./stats");
 const { exportData } = require("./export");
-const { syncToServer, syncToObjectStore } = require("./sync");
+const { syncToServer } = require("./sync");
 const { getSyncStatus } = require("./sync-log");
 const { openDb } = require("./db");
 
@@ -103,31 +103,9 @@ async function handleInstall(options) {
   if (options.server) config.server.url = options.server;
   if (options.token) config.server.token = options.token;
 
-  if (options.storage) config.storage.type = options.storage;
   if (options["sqlite-path"]) config.storage.sqlite.path = options["sqlite-path"];
   if (options["capture-response"] !== undefined) {
     config.capture.response = parseBoolean(options["capture-response"], true);
-  }
-
-  // Legacy S3/MinIO config (deprecated)
-  if (options.bucket) {
-    config.storage.s3.bucket = options.bucket;
-    config.storage.minio.bucket = options.bucket;
-  }
-  if (options.endpoint) {
-    config.storage.s3.endpoint = options.endpoint;
-    config.storage.minio.endpoint = options.endpoint;
-  }
-  if (options["access-key"]) {
-    config.storage.s3.accessKey = options["access-key"];
-    config.storage.minio.accessKey = options["access-key"];
-  }
-  if (options["secret-key"]) {
-    config.storage.s3.secretKey = options["secret-key"];
-    config.storage.minio.secretKey = options["secret-key"];
-  }
-  if (options.region) {
-    config.storage.s3.region = options.region;
   }
 
   const targets = resolveCliList(options.cli);
@@ -523,23 +501,14 @@ async function handleSync(options) {
       chunkSize: options["chunk-size"] ? Number(options["chunk-size"]) : undefined,
     };
 
-    // Use server sync if configured, otherwise fall back to legacy
-    const useServer = config.server?.url && config.server?.token;
-    const result = useServer
-      ? await syncToServer(config, syncOptions)
-      : await syncToObjectStore(config, syncOptions);
+    const result = await syncToServer(config, syncOptions);
 
     if (options.json) {
       printJson(result);
     } else {
-      if (useServer) {
-        console.log(`Synced ${result.uploaded} records in ${result.chunks} request(s)`);
-        if (result.duplicates) console.log(`  Duplicates skipped: ${result.duplicates}`);
-        if (result.rejected) console.log(`  Rejected: ${result.rejected}`);
-      } else {
-        console.log(`Uploaded ${result.uploaded} records (${result.files} files)`);
-        console.log("  Warning: Using legacy direct MinIO sync. Configure server.url and server.token for the new sync method.");
-      }
+      console.log(`Synced ${result.uploaded} records in ${result.chunks} request(s)`);
+      if (result.duplicates) console.log(`  Duplicates skipped: ${result.duplicates}`);
+      if (result.rejected) console.log(`  Rejected: ${result.rejected}`);
     }
   } finally {
     releaseSyncLock(lock.lockPath);

@@ -3,7 +3,4 @@ kind: ConfigMap
 metadata:
   name: oh-my-prompt-config
   namespace: oh-my-prompt
-data:
-  MINIO_ENDPOINT: "minio.example.com"  # TODO: Replace with your MinIO endpoint
-  MINIO_BUCKET: "oh-my-prompt"
-  MINIO_USE_SSL: "true"
+data: {}

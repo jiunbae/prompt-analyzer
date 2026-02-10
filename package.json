@@ -36,7 +36,6 @@
     "drizzle-orm": "^0.45.1",
     "ioredis": "^5.9.2",
     "lucide-react": "^0.563.0",
-    "minio": "^8.0.6",
     "next": "16.1.6",
     "pino": "^10.3.0",
     "postgres": "^3.4.8",

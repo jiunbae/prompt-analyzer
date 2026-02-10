@@ -9,43 +9,21 @@ function validateConfig(config) {
   const errors = [];
   const warnings = [];
 
-  const type = config.storage.type;
-  if (!type || !["sqlite", "minio", "s3"].includes(type)) {
-    errors.push("storage.type must be sqlite|minio|s3");
-  }
-
   if (!config.storage.sqlite?.path) {
     errors.push("storage.sqlite.path is required");
-  }
-
-  if (type === "minio") {
-    const minio = config.storage.minio || {};
-    if (!minio.bucket) errors.push("storage.minio.bucket is required");
-    if (!minio.endpoint) errors.push("storage.minio.endpoint is required");
-    if (!minio.accessKey) errors.push("storage.minio.accessKey is required");
-    if (!minio.secretKey) errors.push("storage.minio.secretKey is required");
-  }
-
-  if (type === "s3") {
-    const s3 = config.storage.s3 || {};
-    if (!s3.bucket) errors.push("storage.s3.bucket is required");
-    if (!s3.accessKey) errors.push("storage.s3.accessKey is required");
-    if (!s3.secretKey) errors.push("storage.s3.secretKey is required");
   }
 
   if (config.queue?.maxBytes !== undefined && Number(config.queue.maxBytes) <= 0) {
     errors.push("queue.maxBytes must be > 0");
   }
 
-  // Server sync config (preferred)
+  // Server sync config
   if (config.server?.url && config.server?.token) {
     // Server sync configured - good
   } else if (config.server?.url && !config.server?.token) {
     errors.push("server.url is set but server.token is missing");
   } else if (!config.server?.url && config.server?.token) {
     warnings.push("server.token is set but server.url is missing");
-  } else if (config.sync?.userToken && (config.storage?.minio?.bucket || config.storage?.s3?.bucket)) {
-    warnings.push("Using legacy direct MinIO/S3 sync. Migrate to server sync: omp config set server.url <URL>");
   } else {
     warnings.push("No sync configured. Set server.url and server.token for cloud sync.");
   }
