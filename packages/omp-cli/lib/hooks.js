@@ -18,45 +18,121 @@ OMP_BIN="\${OMP_BIN:-omp}"
 
 payload="$(cat || true)"
 if [ -n "$payload" ]; then
-  # Enrich stdin payload with env vars that Claude Code exposes
-  enriched=$(printf '%s' "$payload" | node -e "
-    let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
-      const p=JSON.parse(d);
-      if(!p.project)p.project=process.env.CLAUDE_PROJECT||process.env.PROJECT||'';
-      if(!p.cwd)p.cwd=process.env.PWD||'';
-      if(!p.session_id)p.session_id=process.env.CLAUDE_SESSION_ID||process.env.SESSION_ID||'';
-      if(!p.model)p.model=process.env.CLAUDE_MODEL||process.env.MODEL||'';
-      console.log(JSON.stringify(p));
-    });
-  " 2>/dev/null) || enriched="$payload"
-  printf '%s\\n' "$enriched" | "$OMP_BIN" ingest --stdin --source claude-code || true
+  # Claude Code sends: { prompt, session_id, cwd, hook_event_name, ... }
+  # Map "prompt" field to "text" and add source metadata for omp ingest
+  enriched=$(node -e "
+    const p = JSON.parse(process.argv[1]);
+    const out = {
+      ...p,
+      text: p.prompt || p.text || p.prompt_text || '',
+      source: p.source || 'claude-code',
+      cli_name: p.cli_name || 'claude',
+    };
+    console.log(JSON.stringify(out));
+  " "$payload" 2>/dev/null) || enriched="$payload"
+
+  printf '%s\\n' "$enriched" | "$OMP_BIN" ingest --stdin || true
   exit 0
 fi
+`;
+}
 
-node - <<'NODE'
-const env = process.env;
-const payload = {
-  timestamp: new Date().toISOString(),
+function claudeStopHookScript() {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+OMP_BIN="\${OMP_BIN:-omp}"
+
+payload="$(cat || true)"
+if [ -z "$payload" ]; then exit 0; fi
+
+# Capture only the LAST assistant response from the transcript.
+# Stop fires after each turn, so we only need the most recent one.
+response=$(OMP_PAYLOAD="$payload" node << 'NODESCRIPT'
+const fs = require('fs');
+const p = JSON.parse(process.env.OMP_PAYLOAD);
+if (p.hook_event_name !== 'Stop') process.exit(0);
+const sid = p.session_id;
+const tp = p.transcript_path;
+if (!sid || !tp) process.exit(0);
+
+let rawLines;
+try { rawLines = fs.readFileSync(tp, 'utf-8').split('\\n').filter(Boolean); }
+catch { process.exit(0); }
+
+const entries = [];
+for (const raw of rawLines) {
+  try { entries.push(JSON.parse(raw)); } catch {}
+}
+if (entries.length === 0) process.exit(0);
+
+function extractText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.filter(b => b.type === 'text').map(b => b.text).join('\\n');
+  }
+  return '';
+}
+
+function isReal(entry) {
+  if ((entry.type || entry.role) !== 'user') return false;
+  const c = entry.message?.content || entry.content;
+  if (typeof c !== 'string') return false;
+  const t = c.trim();
+  if (!t) return false;
+  if (t.startsWith('<local-command-')) return false;
+  if (t.startsWith('<command-name>')) return false;
+  if (t.startsWith('<task-notification>')) return false;
+  if (t.startsWith('<system-reminder>')) return false;
+  if (t.startsWith('This session is being continued')) return false;
+  if (t.startsWith('Stop hook feedback:')) return false;
+  if (t === '[Request interrupted by user]') return false;
+  if (/^\\s*(Claude Code|[\\u2590\\u259B])/.test(t)) return false;
+  return true;
+}
+
+// Walk backward to find the last real user message
+let lastUserIdx = -1;
+for (let i = entries.length - 1; i >= 0; i--) {
+  if (isReal(entries[i])) { lastUserIdx = i; break; }
+}
+if (lastUserIdx === -1) process.exit(0);
+
+// Collect all assistant text from lastUserIdx+1 to end
+const parts = [];
+let cwd = '';
+for (let i = lastUserIdx + 1; i < entries.length; i++) {
+  const e = entries[i];
+  if ((e.type || e.role) !== 'assistant') continue;
+  const c = e.message?.content || e.content;
+  if (!c) continue;
+  const t = extractText(c);
+  if (t.trim()) parts.push(t);
+  if (e.cwd) cwd = e.cwd;
+}
+if (parts.length === 0) process.exit(0);
+
+const uc = entries[lastUserIdx].message?.content || entries[lastUserIdx].content;
+const userText = typeof uc === 'string' ? uc : '';
+
+console.log(JSON.stringify({
+  session_id: sid,
+  role: 'assistant',
+  text: parts.join('\\n\\n'),
+  user_prompt_text: userText,
   source: 'claude-code',
-  session_id: env.CLAUDE_SESSION_ID || env.SESSION_ID || '',
-  project: env.CLAUDE_PROJECT || env.PROJECT || '',
-  cwd: env.PWD || '',
-  role: env.CLAUDE_HOOK_ROLE || env.ROLE || 'user',
-  text: env.CLAUDE_PROMPT || env.CLAUDE_INPUT || env.PROMPT || '',
-  response_text: env.CLAUDE_RESPONSE || env.RESPONSE || '',
-  model: env.CLAUDE_MODEL || env.MODEL || '',
   cli_name: 'claude',
-  cli_version: env.CLAUDE_VERSION || '',
-  hook_version: '1.0.0',
+  cwd: cwd || p.cwd || '',
+  project: p.project || '',
   capture_response: true,
-};
-if (!payload.text) process.exit(0);
-console.log(JSON.stringify(payload));
-NODE
+}));
+NODESCRIPT
+) || exit 0
 
-if [ $? -eq 0 ]; then
-  "$OMP_BIN" ingest --stdin --source claude-code || true
+if [ -n "$response" ]; then
+  printf '%s\\n' "$response" | "$OMP_BIN" ingest --stdin || true
 fi
+exit 0
 `;
 }
 
@@ -158,6 +234,82 @@ function getClaudeHookPath() {
   return path.join(os.homedir(), ".claude", "hooks", "prompt-logger.sh");
 }
 
+function getClaudeStopHookPath() {
+  return path.join(os.homedir(), ".claude", "hooks", "stop-capture.sh");
+}
+
+function getClaudeSettingsPath() {
+  return path.join(os.homedir(), ".claude", "settings.json");
+}
+
+function ensureClaudeSettingsHook(eventName, scriptPath) {
+  const settingsPath = getClaudeSettingsPath();
+  let settings = {};
+  if (fs.existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    } catch {
+      settings = {};
+    }
+  }
+
+  if (!settings.hooks) settings.hooks = {};
+  if (!settings.hooks[eventName]) settings.hooks[eventName] = [];
+
+  const command = `bash ${scriptPath}`;
+  const hookEntries = settings.hooks[eventName];
+
+  // Check if our hook is already registered
+  const exists = hookEntries.some((entry) => {
+    if (entry.hooks) {
+      return entry.hooks.some((h) => h.command && h.command.includes(scriptPath));
+    }
+    return entry.command && entry.command.includes(scriptPath);
+  });
+
+  if (!exists) {
+    hookEntries.push({
+      hooks: [
+        {
+          type: "command",
+          command: command,
+        },
+      ],
+    });
+  }
+
+  ensureDir(path.dirname(settingsPath));
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  return settingsPath;
+}
+
+function removeClaudeSettingsHook(eventName, scriptPath) {
+  const settingsPath = getClaudeSettingsPath();
+  if (!fs.existsSync(settingsPath)) return;
+
+  let settings;
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+  } catch {
+    return;
+  }
+
+  if (!settings.hooks || !settings.hooks[eventName]) return;
+
+  settings.hooks[eventName] = settings.hooks[eventName].filter((entry) => {
+    if (entry.hooks) {
+      return !entry.hooks.some((h) => h.command && h.command.includes(scriptPath));
+    }
+    return !(entry.command && entry.command.includes(scriptPath));
+  });
+
+  if (settings.hooks[eventName].length === 0) {
+    delete settings.hooks[eventName];
+  }
+
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+}
+
 function getCodexHome() {
   return process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 }
@@ -185,19 +337,42 @@ function buildNotifyLine(cmdArray) {
 
 function installClaudeHook() {
   const hookPath = getClaudeHookPath();
+  const stopHookPath = getClaudeStopHookPath();
   ensureDir(path.dirname(hookPath));
+
+  // Write prompt capture hook
   fs.writeFileSync(hookPath, claudeHookScript());
   makeExecutable(hookPath);
+
+  // Write response capture hook (Stop event)
+  fs.writeFileSync(stopHookPath, claudeStopHookScript());
+  makeExecutable(stopHookPath);
+
+  // Register both hooks in Claude settings.json
+  ensureClaudeSettingsHook("UserPromptSubmit", hookPath);
+  ensureClaudeSettingsHook("Stop", stopHookPath);
+
   return hookPath;
 }
 
 function uninstallClaudeHook() {
   const hookPath = getClaudeHookPath();
+  const stopHookPath = getClaudeStopHookPath();
+  let removed = null;
+
   if (fs.existsSync(hookPath)) {
     fs.unlinkSync(hookPath);
-    return hookPath;
+    removed = hookPath;
   }
-  return null;
+  if (fs.existsSync(stopHookPath)) {
+    fs.unlinkSync(stopHookPath);
+  }
+
+  // Remove from Claude settings.json
+  removeClaudeSettingsHook("UserPromptSubmit", hookPath);
+  removeClaudeSettingsHook("Stop", stopHookPath);
+
+  return removed;
 }
 
 function ensureCodexNotifyConfig(scriptPath, wrapperPath, chainPath) {
@@ -348,6 +523,7 @@ function listHookStatus() {
 
   return {
     claude_code: fs.existsSync(getClaudeHookPath()),
+    claude_code_stop: fs.existsSync(getClaudeStopHookPath()),
     codex: codexConfigured,
   };
 }

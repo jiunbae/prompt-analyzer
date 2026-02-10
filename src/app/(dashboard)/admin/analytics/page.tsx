@@ -117,7 +117,7 @@ export default function AdminAnalyticsPage() {
           setUsers(data.users);
           setUserSummary(data.userSummary);
         } else if (res.status === 403) {
-          router.push("/prompts");
+          router.push("/sessions");
         } else {
           const data = await res.json();
           setError(data.error || "Failed to fetch analytics");
@@ -133,7 +133,7 @@ export default function AdminAnalyticsPage() {
 
   useEffect(() => {
     if (!userLoading && !user?.isAdmin) {
-      router.push("/prompts");
+      router.push("/sessions");
       return;
     }
     if (!userLoading && user?.isAdmin) {

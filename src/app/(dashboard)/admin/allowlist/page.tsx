@@ -44,7 +44,7 @@ export default function AllowlistPage() {
         const data = await res.json();
         setEmails(data.allowedEmails || []);
       } else if (res.status === 403) {
-        router.push("/prompts");
+        router.push("/sessions");
       } else {
         const data = await res.json();
         setError(data.error || "Failed to fetch allowlist");
@@ -59,7 +59,7 @@ export default function AllowlistPage() {
   useEffect(() => {
     if (!userLoading) {
       if (!user?.isAdmin) {
-        router.push("/prompts");
+        router.push("/sessions");
       } else {
         fetchEmails();
       }

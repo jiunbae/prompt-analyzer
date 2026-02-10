@@ -58,7 +58,7 @@ export default function AdminUsersPage() {
         const data = await res.json();
         setUsers(data.users || []);
       } else if (res.status === 403) {
-        router.push("/prompts");
+        router.push("/sessions");
       } else {
         const data = await res.json();
         setError(data.error || "Failed to fetch users");
@@ -73,7 +73,7 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (!userLoading) {
       if (!user?.isAdmin) {
-        router.push("/prompts");
+        router.push("/sessions");
       } else {
         fetchUsers();
       }

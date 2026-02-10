@@ -13,8 +13,8 @@ const { getQueueStats } = require("./queue");
 const { loadState } = require("./state");
 const { getStats } = require("./stats");
 const { exportData } = require("./export");
-const { syncToServer } = require("./sync");
-const { getSyncStatus } = require("./sync-log");
+const { syncToServer, postJson } = require("./sync");
+const { getSyncStatus, updateSyncState } = require("./sync-log");
 const { openDb } = require("./db");
 
 function parseArgs(argv) {
@@ -544,6 +544,66 @@ function handleSyncStatus(options) {
   }
 }
 
+async function handleSyncFlush(options) {
+  if (options.help) {
+    console.log("Usage: omp sync flush [--yes]");
+    console.log("");
+    console.log("Delete ALL server-side records for your account.");
+    console.log("");
+    console.log("Options:");
+    console.log("  --yes, -y   Skip confirmation prompt");
+    console.log("  --json      Output results as JSON");
+    return;
+  }
+
+  const config = loadConfig();
+  const serverUrl = config.server?.url;
+  const serverToken = config.server?.token;
+
+  if (!serverUrl || !serverToken) {
+    console.error(
+      "Server not configured. Set server.url and server.token:\n" +
+        "  omp config set server.url https://your-server.example.com\n" +
+        "  omp config set server.token YOUR_TOKEN"
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!options.yes && !options.y) {
+    console.log("This will delete ALL server-side records for your account.");
+    console.log("Run with --yes to confirm.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const flushUrl = `${serverUrl.replace(/\/$/, "")}/api/sync/flush`;
+  const headers = { "X-User-Token": serverToken };
+
+  try {
+    const response = await postJson(flushUrl, headers, {}, "DELETE");
+    if (response.status === 401) {
+      throw new Error("Authentication failed. Check server.token.");
+    }
+    if (response.status >= 400) {
+      throw new Error(`Server error (${response.status}): ${JSON.stringify(response.body)}`);
+    }
+
+    // Reset local sync state so next sync re-uploads everything
+    updateSyncState(config, null, null);
+
+    if (options.json) {
+      printJson({ flushed: true, deleted: response.body.deleted || 0 });
+    } else {
+      console.log(`Server data flushed. ${response.body.deleted || 0} records deleted.`);
+      console.log("Local sync state reset. Run 'omp sync' to re-upload.");
+    }
+  } catch (error) {
+    console.error(`Flush failed: ${error.message}`);
+    process.exitCode = 1;
+  }
+}
+
 async function handleIngest(options) {
   const config = loadConfig();
   if (options.replay) {
@@ -660,6 +720,8 @@ async function main() {
     case "sync":
       if (positional[0] === "status") {
         handleSyncStatus(options);
+      } else if (positional[0] === "flush") {
+        await handleSyncFlush(options);
       } else {
         await handleSync(options);
       }
@@ -673,6 +735,38 @@ async function main() {
     case "import":
       await handleImport(options, positional);
       break;
+    case "backfill": {
+      if (options.help) {
+        console.log("Usage: omp backfill [OPTIONS]");
+        console.log("");
+        console.log("Scan Claude Code transcripts and ingest all turns into omp.db.");
+        console.log("Reads JSONL files from ~/.claude/projects/*/ directories.");
+        console.log("");
+        console.log("Options:");
+        console.log("  --path <file>   Process a single transcript file");
+        console.log("  --dry-run       Show what would be imported without writing");
+        console.log("  --json          Output results as JSON");
+        break;
+      }
+      const { backfillTranscripts } = require("./backfill");
+      const config = loadConfig();
+      const result = backfillTranscripts(config, {
+        path: options.path,
+        dryRun: !!options["dry-run"],
+      });
+      if (options.json) {
+        printJson(result);
+      } else {
+        console.log(`Scanned ${result.files} transcript file(s)`);
+        console.log(`Imported: ${result.totalImported}, Skipped: ${result.totalSkipped}, Duplicates: ${result.totalDuplicates}`);
+        for (const f of result.fileResults) {
+          const name = path.basename(f.path, ".jsonl");
+          const status = f.error ? ` (${f.error})` : "";
+          console.log(`  ${name}: ${f.turns} turns, ${f.imported} imported, ${f.duplicates} deduped${status}`);
+        }
+      }
+      break;
+    }
     case "db": {
       const action = positional[0];
       if (action === "migrate") {
@@ -686,7 +780,39 @@ async function main() {
         }
         break;
       }
-      console.error("Usage: omp db migrate");
+      if (action === "flush") {
+        if (options.help) {
+          console.log("Usage: omp db flush [--yes]");
+          console.log("");
+          console.log("Delete ALL local records and reset sync state.");
+          console.log("");
+          console.log("Options:");
+          console.log("  --yes, -y   Skip confirmation prompt");
+          console.log("  --json      Output results as JSON");
+          break;
+        }
+        const config = loadConfig();
+        if (!options.yes && !options.y) {
+          console.log("This will delete ALL local records and reset sync state.");
+          console.log("Run with --yes to confirm.");
+          process.exitCode = 1;
+          break;
+        }
+        const db = openDb(config.storage.sqlite.path);
+        db.exec("DELETE FROM prompts");
+        db.exec("DELETE FROM sync_log");
+        db.exec("DELETE FROM sync_state");
+        try { db.exec("INSERT INTO prompts_fts(prompts_fts) VALUES('rebuild')"); } catch {}
+        const remaining = db.prepare("SELECT count(*) as c FROM prompts").get();
+        db.close();
+        if (options.json) {
+          printJson({ flushed: true, remaining: remaining.c });
+        } else {
+          console.log("Local database flushed. All records and sync state cleared.");
+        }
+        break;
+      }
+      console.error("Usage: omp db <migrate|flush>");
       process.exitCode = 2;
       break;
     }
@@ -713,7 +839,7 @@ async function main() {
     default:
       console.log("Oh My Prompt CLI");
       console.log(
-        "Commands: setup, install, uninstall, status, stats, export, sync, ingest, config, import, db, doctor"
+        "Commands: setup, install, uninstall, status, stats, export, sync, ingest, config, import, backfill, db, doctor"
       );
       console.log("Use --help with each command for options.");
       process.exitCode = 2;

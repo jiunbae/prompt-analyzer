@@ -56,7 +56,7 @@ function rowToUploadRecord(row) {
   };
 }
 
-function postJson(url, headers, body) {
+function postJson(url, headers, body, method = "POST") {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const transport = parsed.protocol === "https:" ? https : http;
@@ -66,7 +66,7 @@ function postJson(url, headers, body) {
       hostname: parsed.hostname,
       port: parsed.port || (parsed.protocol === "https:" ? 443 : 80),
       path: parsed.pathname + parsed.search,
-      method: "POST",
+      method,
       headers: {
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(payload),
@@ -193,4 +193,5 @@ async function syncToServer(config, options = {}) {
 
 module.exports = {
   syncToServer,
+  postJson,
 };

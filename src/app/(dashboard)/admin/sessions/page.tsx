@@ -66,7 +66,7 @@ function AdminSessionsContent() {
 
   const [searchInput, setSearchInput] = useState(currentSearch);
   const [showFilters, setShowFilters] = useState(
-    !!(currentProject || currentSource || currentDevice || currentWorkspace || currentFrom || currentTo)
+    !!(currentUserId || currentProject || currentSource || currentDevice || currentWorkspace || currentFrom || currentTo)
   );
 
   const fetchSessions = useCallback(async () => {
@@ -173,61 +173,7 @@ function AdminSessionsContent() {
         </p>
       </div>
 
-      {/* Top filters: User + Device + Workspace */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="space-y-1">
-          <label htmlFor="user-filter" className="text-xs text-muted-foreground font-medium">User</label>
-          <select
-            id="user-filter"
-            value={currentUserId}
-            onChange={(e) => updateParams({ userId: e.target.value || undefined })}
-            className="w-full sm:w-64 px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
-          >
-            <option value="">All users</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name || u.email.split("@")[0]} ({u.email})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor="device-filter" className="text-xs text-muted-foreground font-medium">Device</label>
-          <select
-            id="device-filter"
-            value={currentDevice}
-            onChange={(e) => updateParams({ device: e.target.value || undefined })}
-            className="w-full sm:w-64 px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
-          >
-            <option value="">All devices</option>
-            {devices.map((d) => (
-              <option key={d.name} value={d.name}>
-                {d.name} ({d.count})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor="workspace-filter" className="text-xs text-muted-foreground font-medium">Workspace</label>
-          <select
-            id="workspace-filter"
-            value={currentWorkspace}
-            onChange={(e) => updateParams({ workspace: e.target.value || undefined })}
-            className="w-full sm:w-64 px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
-          >
-            <option value="">All workspaces</option>
-            {workspaces.map((w) => (
-              <option key={w.name} value={w.name}>
-                {shortenPath(w.name)} ({w.count})
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Search + Advanced Filters */}
+      {/* Search + Filters */}
       <div className="space-y-4">
         <form onSubmit={handleSearch} className="flex gap-2">
           <div className="relative flex-1">
@@ -274,6 +220,23 @@ function AdminSessionsContent() {
         {showFilters && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-surface/50 rounded-lg border border-border">
             <div className="space-y-1">
+              <label htmlFor="adm-user-filter" className="text-xs text-muted-foreground font-medium">User</label>
+              <select
+                id="adm-user-filter"
+                value={currentUserId}
+                onChange={(e) => updateParams({ userId: e.target.value || undefined })}
+                className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
+              >
+                <option value="">All users</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name || u.email.split("@")[0]} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
               <label htmlFor="adm-project-filter" className="text-xs text-muted-foreground font-medium">Project</label>
               <select
                 id="adm-project-filter"
@@ -291,17 +254,51 @@ function AdminSessionsContent() {
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="adm-source-filter" className="text-xs text-muted-foreground font-medium">Source</label>
+              <label htmlFor="adm-source-filter" className="text-xs text-muted-foreground font-medium">Agent</label>
               <select
                 id="adm-source-filter"
                 value={currentSource}
                 onChange={(e) => updateParams({ source: e.target.value || undefined })}
                 className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
               >
-                <option value="">All sources</option>
+                <option value="">All agents</option>
                 {sources.map((s) => (
                   <option key={s.name} value={s.name}>
                     {s.name} ({s.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="adm-device-filter" className="text-xs text-muted-foreground font-medium">Device</label>
+              <select
+                id="adm-device-filter"
+                value={currentDevice}
+                onChange={(e) => updateParams({ device: e.target.value || undefined })}
+                className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
+              >
+                <option value="">All devices</option>
+                {devices.map((d) => (
+                  <option key={d.name} value={d.name}>
+                    {d.name} ({d.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="adm-workspace-filter" className="text-xs text-muted-foreground font-medium">Workspace</label>
+              <select
+                id="adm-workspace-filter"
+                value={currentWorkspace}
+                onChange={(e) => updateParams({ workspace: e.target.value || undefined })}
+                className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
+              >
+                <option value="">All workspaces</option>
+                {workspaces.map((w) => (
+                  <option key={w.name} value={w.name}>
+                    {shortenPath(w.name)} ({w.count})
                   </option>
                 ))}
               </select>
@@ -374,7 +371,7 @@ function AdminSessionsContent() {
             )}
             {currentSource && (
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-500/20 text-purple-300 rounded-full text-xs">
-                Source: {currentSource}
+                Agent: {currentSource}
                 <button type="button" onClick={() => updateParams({ source: undefined })} className="hover:text-purple-100">x</button>
               </span>
             )}

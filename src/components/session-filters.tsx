@@ -153,14 +153,14 @@ export function SessionFilters({
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="source-filter" className="text-xs text-muted-foreground font-medium">Source</label>
+            <label htmlFor="source-filter" className="text-xs text-muted-foreground font-medium">Agent</label>
             <select
               id="source-filter"
               value={currentSource ?? ""}
               onChange={(e) => handleFilterChange("source", e.target.value || undefined)}
               className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
             >
-              <option value="">All sources</option>
+              <option value="">All agents</option>
               {sources.map((s) => (
                 <option key={s.name} value={s.name}>
                   {s.name} ({s.count})
@@ -257,7 +257,7 @@ export function SessionFilters({
           )}
           {currentSource && (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/20 text-blue-300 rounded-full text-xs">
-              Source: {currentSource}
+              Agent: {currentSource}
               <button type="button" onClick={() => handleFilterChange("source", undefined)} className="hover:text-blue-100">x</button>
             </span>
           )}

@@ -27,7 +27,7 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        router.push("/prompts");
+        router.push("/sessions");
         router.refresh();
       } else {
         const data = await res.json();

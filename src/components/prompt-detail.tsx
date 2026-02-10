@@ -94,7 +94,7 @@ export function PromptDetail({
     try {
       const res = await fetch(`/api/prompts/${_id}`, { method: "DELETE" });
       if (res.ok) {
-        router.push("/prompts");
+        router.push("/sessions");
         router.refresh();
       } else {
         alert("Failed to delete prompt");
@@ -125,7 +125,7 @@ export function PromptDetail({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Link
-          href="/prompts"
+          href="/sessions"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <svg

@@ -46,51 +46,91 @@ OMP_BIN="\${OMP_BIN:-omp}"
 payload="$(cat || true)"
 if [ -z "$payload" ]; then exit 0; fi
 
-enriched=$(node -e "
-  const fs = require('fs');
-  const p = JSON.parse(process.argv[1]);
-  if (p.hook_event_name !== 'Stop') process.exit(0);
-  const sid = p.session_id;
-  const tp = p.transcript_path;
-  if (!sid || !tp) process.exit(0);
+# Capture only the LAST assistant response from the transcript.
+# Stop fires after each turn, so we only need the most recent one.
+response=$(OMP_PAYLOAD="$payload" node << 'NODESCRIPT'
+const fs = require('fs');
+const p = JSON.parse(process.env.OMP_PAYLOAD);
+if (p.hook_event_name !== 'Stop') process.exit(0);
+const sid = p.session_id;
+const tp = p.transcript_path;
+if (!sid || !tp) process.exit(0);
 
-  let lines;
-  try { lines = fs.readFileSync(tp, 'utf-8').split('\\\\n').filter(Boolean); }
-  catch { process.exit(0); }
+let rawLines;
+try { rawLines = fs.readFileSync(tp, 'utf-8').split('\\n').filter(Boolean); }
+catch { process.exit(0); }
 
-  let lastAssistant = null;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    try {
-      const entry = JSON.parse(lines[i]);
-      if (entry.role === 'assistant') { lastAssistant = entry; break; }
-    } catch {}
+const entries = [];
+for (const raw of rawLines) {
+  try { entries.push(JSON.parse(raw)); } catch {}
+}
+if (entries.length === 0) process.exit(0);
+
+function extractText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.filter(b => b.type === 'text').map(b => b.text).join('\\n');
   }
-  if (!lastAssistant) process.exit(0);
+  return '';
+}
 
-  let text = '';
-  if (typeof lastAssistant.content === 'string') {
-    text = lastAssistant.content;
-  } else if (Array.isArray(lastAssistant.content)) {
-    text = lastAssistant.content
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('\\\\n');
-  }
-  if (!text) process.exit(0);
+function isReal(entry) {
+  if ((entry.type || entry.role) !== 'user') return false;
+  const c = entry.message?.content || entry.content;
+  if (typeof c !== 'string') return false;
+  const t = c.trim();
+  if (!t) return false;
+  if (t.startsWith('<local-command-')) return false;
+  if (t.startsWith('<command-name>')) return false;
+  if (t.startsWith('<task-notification>')) return false;
+  if (t.startsWith('<system-reminder>')) return false;
+  if (t.startsWith('This session is being continued')) return false;
+  if (t.startsWith('Stop hook feedback:')) return false;
+  if (t === '[Request interrupted by user]') return false;
+  if (/^\\s*(Claude Code|[\\u2590\\u259B])/.test(t)) return false;
+  return true;
+}
 
-  console.log(JSON.stringify({
-    session_id: sid,
-    role: 'assistant',
-    text: text,
-    source: 'claude-code',
-    cli_name: 'claude',
-    cwd: p.cwd || '',
-    capture_response: true,
-  }));
-" "$payload" 2>/dev/null) || exit 0
+// Walk backward to find the last real user message
+let lastUserIdx = -1;
+for (let i = entries.length - 1; i >= 0; i--) {
+  if (isReal(entries[i])) { lastUserIdx = i; break; }
+}
+if (lastUserIdx === -1) process.exit(0);
 
-if [ -n "$enriched" ]; then
-  printf '%s\\n' "$enriched" | "$OMP_BIN" ingest --stdin || true
+// Collect all assistant text from lastUserIdx+1 to end
+const parts = [];
+let cwd = '';
+for (let i = lastUserIdx + 1; i < entries.length; i++) {
+  const e = entries[i];
+  if ((e.type || e.role) !== 'assistant') continue;
+  const c = e.message?.content || e.content;
+  if (!c) continue;
+  const t = extractText(c);
+  if (t.trim()) parts.push(t);
+  if (e.cwd) cwd = e.cwd;
+}
+if (parts.length === 0) process.exit(0);
+
+const uc = entries[lastUserIdx].message?.content || entries[lastUserIdx].content;
+const userText = typeof uc === 'string' ? uc : '';
+
+console.log(JSON.stringify({
+  session_id: sid,
+  role: 'assistant',
+  text: parts.join('\\n\\n'),
+  user_prompt_text: userText,
+  source: 'claude-code',
+  cli_name: 'claude',
+  cwd: cwd || p.cwd || '',
+  project: p.project || '',
+  capture_response: true,
+}));
+NODESCRIPT
+) || exit 0
+
+if [ -n "$response" ]; then
+  printf '%s\\n' "$response" | "$OMP_BIN" ingest --stdin || true
 fi
 exit 0
 `;
