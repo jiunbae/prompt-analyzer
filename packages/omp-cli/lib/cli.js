@@ -739,30 +739,51 @@ async function main() {
       if (options.help) {
         console.log("Usage: omp backfill [OPTIONS]");
         console.log("");
-        console.log("Scan Claude Code transcripts and ingest all turns into omp.db.");
-        console.log("Reads JSONL files from ~/.claude/projects/*/ directories.");
+        console.log("Scan Claude Code transcripts and Codex history, ingest into omp.db.");
+        console.log("Reads Claude JSONL from ~/.claude/projects/*/ and Codex from ~/.codex/history.jsonl");
         console.log("");
         console.log("Options:");
-        console.log("  --path <file>   Process a single transcript file");
+        console.log("  --path <file>   Process a single transcript file (Claude only)");
+        console.log("  --claude-only   Only backfill Claude Code transcripts");
+        console.log("  --codex-only    Only backfill Codex history");
         console.log("  --dry-run       Show what would be imported without writing");
         console.log("  --json          Output results as JSON");
         break;
       }
-      const { backfillTranscripts } = require("./backfill");
+      const { backfillTranscripts, backfillCodex } = require("./backfill");
       const config = loadConfig();
-      const result = backfillTranscripts(config, {
-        path: options.path,
-        dryRun: !!options["dry-run"],
-      });
+      const dryRun = !!options["dry-run"];
+      const claudeOnly = !!options["claude-only"];
+      const codexOnly = !!options["codex-only"];
+
+      let claudeResult = null;
+      let codexResult = null;
+
+      if (!codexOnly) {
+        claudeResult = backfillTranscripts(config, {
+          path: options.path,
+          dryRun,
+        });
+      }
+      if (!claudeOnly && !options.path) {
+        codexResult = backfillCodex(config, { dryRun });
+      }
+
       if (options.json) {
-        printJson(result);
+        printJson({ claude: claudeResult, codex: codexResult });
       } else {
-        console.log(`Scanned ${result.files} transcript file(s)`);
-        console.log(`Imported: ${result.totalImported}, Skipped: ${result.totalSkipped}, Duplicates: ${result.totalDuplicates}`);
-        for (const f of result.fileResults) {
-          const name = path.basename(f.path, ".jsonl");
-          const status = f.error ? ` (${f.error})` : "";
-          console.log(`  ${name}: ${f.turns} turns, ${f.imported} imported, ${f.duplicates} deduped${status}`);
+        if (claudeResult) {
+          console.log(`[Claude] Scanned ${claudeResult.files} transcript file(s)`);
+          console.log(`[Claude] Imported: ${claudeResult.totalImported}, Skipped: ${claudeResult.totalSkipped}, Duplicates: ${claudeResult.totalDuplicates}`);
+          for (const f of claudeResult.fileResults) {
+            const name = path.basename(f.path, ".jsonl");
+            const status = f.error ? ` (${f.error})` : "";
+            console.log(`  ${name}: ${f.turns} turns, ${f.imported} imported, ${f.duplicates} deduped${status}`);
+          }
+        }
+        if (codexResult) {
+          console.log(`[Codex] Scanned ${codexResult.entries} history entries`);
+          console.log(`[Codex] Imported: ${codexResult.imported}, Skipped: ${codexResult.skipped}, Duplicates: ${codexResult.duplicates}`);
         }
       }
       break;

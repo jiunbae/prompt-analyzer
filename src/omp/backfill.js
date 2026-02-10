@@ -207,8 +207,213 @@ function backfillTranscripts(config, options = {}) {
   };
 }
 
+function getCodexHome() {
+  return process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+}
+
+function getCodexHistoryPath() {
+  return path.join(getCodexHome(), "history.jsonl");
+}
+
+function scanCodexSessionPaths() {
+  const sessionsDir = path.join(getCodexHome(), "sessions");
+  if (!fs.existsSync(sessionsDir)) return [];
+
+  const results = [];
+  function walk(dir) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.name.endsWith(".jsonl")) {
+        results.push(fullPath);
+      }
+    }
+  }
+  walk(sessionsDir);
+  return results;
+}
+
+function parseCodexSession(filePath) {
+  let lines;
+  try {
+    lines = fs.readFileSync(filePath, "utf-8").split("\n").filter(Boolean);
+  } catch {
+    return { sessionId: null, cwd: "", turns: [] };
+  }
+
+  let sessionId = null;
+  let cwd = "";
+  const turns = [];
+  let currentUser = null;
+
+  for (const line of lines) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    if (entry.type === "session_meta" && entry.payload) {
+      sessionId = entry.payload.id || null;
+      cwd = entry.payload.cwd || "";
+    }
+
+    if (entry.type === "event_msg" && entry.payload) {
+      const p = entry.payload;
+      if (p.type === "user_message" && p.message) {
+        if (currentUser) {
+          turns.push(currentUser);
+        }
+        currentUser = {
+          userText: p.message,
+          responseText: null,
+          timestamp: entry.timestamp || null,
+        };
+      } else if (p.type === "agent_message" && p.message && currentUser) {
+        currentUser.responseText = p.message;
+      }
+    }
+  }
+
+  if (currentUser) {
+    turns.push(currentUser);
+  }
+
+  return { sessionId, cwd, turns };
+}
+
+function backfillCodex(config, options = {}) {
+  const sessionPaths = scanCodexSessionPaths();
+  const historyPath = getCodexHistoryPath();
+
+  // Build a map of session responses from transcript files
+  const sessionResponses = new Map();
+  for (const sp of sessionPaths) {
+    const parsed = parseCodexSession(sp);
+    if (parsed.sessionId && parsed.turns.length > 0) {
+      sessionResponses.set(parsed.sessionId, parsed);
+    }
+  }
+
+  // Read history.jsonl for the canonical list of user prompts
+  if (!fs.existsSync(historyPath)) {
+    return { entries: 0, imported: 0, skipped: 0, duplicates: 0, sessions: sessionResponses.size };
+  }
+
+  let lines;
+  try {
+    lines = fs.readFileSync(historyPath, "utf-8").split("\n").filter(Boolean);
+  } catch {
+    return { entries: 0, imported: 0, skipped: 0, duplicates: 0, error: "read failed" };
+  }
+
+  let imported = 0;
+  let skipped = 0;
+  let duplicates = 0;
+
+  // Group history entries by session to match with transcript turns
+  const sessionHistories = new Map();
+  for (const line of lines) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      skipped++;
+      continue;
+    }
+
+    const text = (entry.text || "").trim();
+    if (!text) {
+      skipped++;
+      continue;
+    }
+
+    const sid = entry.session_id || "";
+    if (!sessionHistories.has(sid)) {
+      sessionHistories.set(sid, []);
+    }
+    sessionHistories.get(sid).push(entry);
+  }
+
+  for (const [sessionId, histEntries] of sessionHistories) {
+    const session = sessionResponses.get(sessionId);
+    const turns = session ? session.turns : [];
+    const cwd = session ? session.cwd : "";
+
+    for (let i = 0; i < histEntries.length; i++) {
+      const entry = histEntries[i];
+      const text = (entry.text || "").trim();
+
+      // Match with transcript turn by index
+      const turn = turns[i] || null;
+      const responseText = turn ? turn.responseText : null;
+
+      const timestamp = entry.ts
+        ? new Date(entry.ts * 1000).toISOString()
+        : new Date().toISOString();
+
+      const eventId = hashContent(
+        JSON.stringify({
+          source: "codex",
+          session_id: sessionId,
+          role: "user",
+          prompt_text: text,
+          response_text: "",
+        })
+      );
+
+      const payload = {
+        timestamp,
+        source: "codex",
+        session_id: sessionId,
+        role: "user",
+        text,
+        response_text: responseText,
+        cwd: cwd,
+        project: cwd ? path.basename(cwd) : "",
+        cli_name: "codex",
+        capture_response: !!responseText,
+        event_id: eventId,
+      };
+
+      if (options.dryRun) {
+        imported++;
+        continue;
+      }
+
+      const result = ingestPayload(payload, config);
+      if (result.ok) {
+        if (result.deduped) {
+          duplicates++;
+        } else {
+          imported++;
+        }
+      } else {
+        skipped++;
+      }
+    }
+  }
+
+  return {
+    entries: lines.length - skipped,
+    imported,
+    skipped,
+    duplicates,
+    sessions: sessionResponses.size,
+  };
+}
+
 module.exports = {
   backfillTranscripts,
+  backfillCodex,
   isRealUserMessage,
   extractText,
   parseTranscript,

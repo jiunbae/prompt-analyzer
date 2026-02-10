@@ -1,36 +1,10 @@
 import { logger } from "@/lib/logger";
 import { env } from "@/env";
 import { updateDailyAnalytics } from "./sync";
+import type { UploadRecord, UploadResult } from "./upload-types";
+import { postprocessUploadRecordForDb } from "./upload-postprocess";
 
-export interface UploadRecord {
-  event_id: string;
-  created_at: string;
-  prompt_text: string;
-  response_text?: string | null;
-  prompt_length: number;
-  response_length?: number | null;
-  project?: string | null;
-  cwd?: string | null;
-  source?: string;
-  session_id?: string | null;
-  role?: string;
-  model?: string | null;
-  cli_name?: string;
-  cli_version?: string | null;
-  token_estimate?: number;
-  token_estimate_response?: number | null;
-  word_count?: number;
-  word_count_response?: number | null;
-  content_hash?: string;
-}
-
-export interface UploadResult {
-  success: boolean;
-  accepted: number;
-  duplicates: number;
-  rejected: number;
-  errors: string[];
-}
+export type { UploadRecord, UploadResult } from "./upload-types";
 
 function sanitizeEventId(eventId: string): string {
   // Allowlist: only alphanumeric, hyphens, and underscores
@@ -67,6 +41,9 @@ export async function processUpload(
   const db = drizzle(client, { schema });
 
   try {
+    const redactEnabled = process.env.OMP_UPLOAD_REDACT_ENABLED !== "false";
+    const redactMask = process.env.OMP_UPLOAD_REDACT_MASK || "[REDACTED]";
+
     for (const record of records) {
       if (!record.event_id || !record.created_at || !record.prompt_text) {
         rejected++;
@@ -74,14 +51,19 @@ export async function processUpload(
         continue;
       }
 
+      const processed = postprocessUploadRecordForDb(record, {
+        redactEnabled,
+        redactMask,
+      });
+
       const eventKey = buildEventKey(userToken, record.created_at, record.event_id);
       const dateStr = new Date(record.created_at).toISOString().split("T")[0];
 
       try {
         // Insert into PostgreSQL
-        const promptType = record.prompt_text.includes("<task-notification>")
+        const promptType = processed.promptText.includes("<task-notification>")
           ? "task_notification"
-          : record.prompt_text.includes("<system-reminder>")
+          : processed.promptText.includes("<system-reminder>")
             ? "system"
             : "user_input";
 
@@ -91,21 +73,21 @@ export async function processUpload(
             eventKey,
             timestamp: new Date(record.created_at),
             workingDirectory: record.cwd || "unknown",
-            promptLength: record.prompt_length,
-            promptText: record.prompt_text,
-            responseText: record.response_text || undefined,
-            responseLength: record.response_length || undefined,
+            promptLength: processed.promptLength,
+            promptText: processed.promptText,
+            responseText: processed.responseText,
+            responseLength: processed.responseLength,
             projectName: record.project || (record.cwd ? record.cwd.split("/").pop() || null : null),
             promptType,
             userId,
             source: record.source || undefined,
             sessionId: record.session_id || undefined,
             deviceName: deviceId || undefined,
-            tokenEstimate: record.token_estimate || Math.ceil(record.prompt_length / 4),
-            wordCount: record.word_count || record.prompt_text.split(/\s+/).filter(Boolean).length,
-            tokenEstimateResponse: record.token_estimate_response || undefined,
-            wordCountResponse: record.word_count_response || undefined,
-            searchVector: sql`to_tsvector('english', ${record.prompt_text} || ' ' || ${record.response_text ?? ""})`,
+            tokenEstimate: processed.tokenEstimate,
+            wordCount: processed.wordCount,
+            tokenEstimateResponse: processed.tokenEstimateResponse,
+            wordCountResponse: processed.wordCountResponse,
+            searchVector: sql`to_tsvector('english', ${processed.promptText} || ' ' || ${processed.responseText ?? ""})`,
           })
           .onConflictDoUpdate({
             target: schema.prompts.eventKey,

@@ -22,9 +22,7 @@ function parseHistoryLine(line) {
   }
 
   const timestamp = entry.timestamp || entry.time || entry.created_at;
-  if (!timestamp) {
-    return null;
-  }
+  // Some exporters omit timestamps; ingest will default to now().
 
   const inputMessages =
     entry["input-messages"] || entry.input_messages || entry.input || entry.prompt;

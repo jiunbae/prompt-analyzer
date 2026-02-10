@@ -22,7 +22,9 @@ function defaultConfig() {
     capture: {
       response: true,
       redact: {
-        enabled: true,
+        // Local SQLite should keep raw prompts by default.
+        // Use sync.redact to sanitize data before it leaves the device.
+        enabled: false,
         mask: "[REDACTED]",
       },
     },
@@ -38,6 +40,11 @@ function defaultConfig() {
       enabled: false,
       userToken: "",
       deviceId: "",
+      // Redact only when uploading to server (default ON).
+      redact: {
+        enabled: true,
+        mask: "[REDACTED]",
+      },
     },
     queue: {
       maxBytes: 209715200,
@@ -90,6 +97,12 @@ function loadConfig() {
   merged.hooks = { ...defaultConfig().hooks, ...parsed.hooks };
   merged.hooks.enabled = { ...defaultConfig().hooks.enabled, ...parsed.hooks?.enabled };
   merged.sync = { ...defaultConfig().sync, ...parsed.sync };
+  if (parsed.sync?.redact) {
+    merged.sync.redact = {
+      ...defaultConfig().sync.redact,
+      ...parsed.sync.redact,
+    };
+  }
   merged.queue = { ...defaultConfig().queue, ...parsed.queue };
 
   // Migrate legacy config: copy sync.userToken to server.token if server not configured

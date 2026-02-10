@@ -142,10 +142,16 @@ omp sync status --json
 ```bash
 omp config get
 omp config get storage.type
-omp config set sync.userToken your-token
-omp config set sync.deviceId my-mac
+omp config set server.url https://your-server.example.com
+omp config set server.token your-token
+omp config set server.deviceId my-mac
 omp config set storage.s3.bucket oh-my-prompt
 omp config validate
+# Redact only when uploading to server (recommended)
+omp config set sync.redact.enabled true
+omp config set sync.redact.mask "[REDACTED]"
+
+# Optional: also redact locally before writing to SQLite
 omp config set capture.redact.enabled true
 omp config set capture.redact.mask "[REDACTED]"
 ```

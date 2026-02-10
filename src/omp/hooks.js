@@ -155,9 +155,9 @@ if (!event || event.type !== "agent-turn-complete") {
 }
 
 const inputMessages = Array.isArray(event["input-messages"])
-  ? event["input-messages"].join("\n")
+  ? event["input-messages"].join("\\n")
   : Array.isArray(event.input_messages)
-    ? event.input_messages.join("\n")
+    ? event.input_messages.join("\\n")
     : String(event["input-messages"] || event.input_messages || "");
 
 const responseText = event["last-assistant-message"] || event.last_assistant_message || "";
@@ -331,7 +331,7 @@ function getCodexChainPath() {
 }
 
 function buildNotifyLine(cmdArray) {
-  // Codex config.toml expects notify as a string command, not an array
+  // Codex config.toml expects notify as a string command
   return `"${cmdArray.join(" ")}"`;
 }
 

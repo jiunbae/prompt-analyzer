@@ -61,6 +61,11 @@ mkdir -p ~/.config/oh-my-prompt
 
 cat > ~/.config/oh-my-prompt/config.json << 'EOF'
 {
+  "server": {
+    "url": "YOUR_SERVER_URL",
+    "token": "YOUR_USER_TOKEN",
+    "deviceId": "YOUR_DEVICE_NAME"
+  },
   "storage": {
     "sqlite": {
       "path": "~/.config/oh-my-prompt/prompts.db"
@@ -69,7 +74,7 @@ cat > ~/.config/oh-my-prompt/config.json << 'EOF'
   "capture": {
     "response": true,
     "redact": {
-      "enabled": true,
+      "enabled": false,
       "mask": "[REDACTED]"
     }
   },
@@ -83,8 +88,10 @@ cat > ~/.config/oh-my-prompt/config.json << 'EOF'
   },
   "sync": {
     "enabled": true,
-    "userToken": "YOUR_USER_TOKEN",
-    "deviceId": "YOUR_DEVICE_NAME"
+    "redact": {
+      "enabled": true,
+      "mask": "[REDACTED]"
+    }
   }
 }
 EOF
@@ -94,6 +101,7 @@ Replace the following values:
 
 | Placeholder | Where to find it |
 |-------------|------------------|
+| `YOUR_SERVER_URL` | Your Oh My Prompt server URL (e.g., `https://your-server.com`) |
 | `YOUR_USER_TOKEN` | Web dashboard -> Settings -> API Token |
 | `YOUR_DEVICE_NAME` | A name for this machine (e.g., `jiun-mbp`) |
 
@@ -202,4 +210,4 @@ Run `omp install claude` to install the hook.
 | `omp report` | Generate detailed report |
 | `omp doctor` | Check installation health |
 | `omp config get` | Show current configuration |
-| `omp config set sync.userToken VALUE` | Update a config value |
+| `omp config set server.token VALUE` | Update a config value |

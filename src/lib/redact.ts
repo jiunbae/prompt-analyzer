@@ -1,4 +1,14 @@
-const DEFAULT_PATTERNS = [
+export type RedactOptions = {
+  mask?: string;
+};
+
+type Pattern = {
+  name: string;
+  regex: RegExp;
+  replace?: string;
+};
+
+const DEFAULT_PATTERNS: Pattern[] = [
   {
     name: "api_key_generic",
     regex: /((?:api|access|secret|token|password)[-_ ]?key\s*[:=]\s*)(["']?)[^\s"']{8,}\2/gi,
@@ -33,38 +43,34 @@ const DEFAULT_PATTERNS = [
   },
 ];
 
-function redactText(text, options = {}) {
-  if (!text) return { text: text || "", count: 0 };
+export function redactText(text: string, options: RedactOptions = {}) {
+  if (!text) return { text: "", count: 0 };
+
   const mask = options.mask || "[REDACTED]";
   let output = text;
   let count = 0;
 
-  DEFAULT_PATTERNS.forEach((pattern) => {
+  for (const pattern of DEFAULT_PATTERNS) {
     // Reset stateful regexes (global/sticky) before reuse.
-    try { pattern.regex.lastIndex = 0; } catch { /* ignore */ }
+    try {
+      pattern.regex.lastIndex = 0;
+    } catch {
+      // ignore
+    }
 
     const matches = output.match(pattern.regex);
-    if (!matches || matches.length === 0) return;
+    if (!matches || matches.length === 0) continue;
     count += matches.length;
 
     if (!pattern.replace) {
       output = output.replace(pattern.regex, mask);
-      return;
+      continue;
     }
 
-    if (typeof pattern.replace === "function") {
-      output = output.replace(pattern.regex, (...args) => pattern.replace(...args));
-      return;
-    }
-
-    // Use string replacement so capture groups ($1, $2, ...) are expanded correctly.
     const replacement = pattern.replace.replace("[REDACTED]", mask);
     output = output.replace(pattern.regex, replacement);
-  });
+  }
 
   return { text: output, count };
 }
 
-module.exports = {
-  redactText,
-};

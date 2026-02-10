@@ -2,6 +2,7 @@ const http = require("http");
 const https = require("https");
 const { openDb } = require("./db");
 const { createSyncLog, finishSyncLog, getSyncState, updateSyncState, getDeviceId } = require("./sync-log");
+const { postprocessUploadRecord } = require("./upload-postprocess");
 
 function fetchRows(db, since, lastId) {
   if (!since) {
@@ -134,7 +135,8 @@ async function syncToServer(config, options = {}) {
   try {
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
-      const records = chunk.map(rowToUploadRecord);
+      let records = chunk.map(rowToUploadRecord);
+      records = records.map((r) => postprocessUploadRecord(r, config));
 
       if (options.dryRun) {
         totalAccepted += chunk.length;
