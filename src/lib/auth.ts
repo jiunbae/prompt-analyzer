@@ -60,12 +60,13 @@ export function createSessionToken(payload: SessionPayload): string {
  * @param token - Signed session token
  * @returns Session payload or null if invalid/tampered
  */
+const MAX_TOKEN_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 export function parseSessionToken(token: string): SessionPayload | null {
   try {
     const dotIndex = token.lastIndexOf(".");
     if (dotIndex === -1) {
-      // Try legacy unsigned base64 token (migration path)
-      return parseLegacyToken(token);
+      return null; // Reject unsigned tokens
     }
 
     const encoded = token.slice(0, dotIndex);
@@ -76,7 +77,8 @@ export function parseSessionToken(token: string): SessionPayload | null {
       .update(encoded)
       .digest("base64url");
 
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+    if (signature.length !== expectedSig.length ||
+        !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
       return null;
     }
 
@@ -87,22 +89,10 @@ export function parseSessionToken(token: string): SessionPayload | null {
       return null;
     }
 
-    return {
-      userId: parsed.userId,
-      email: parsed.email,
-      token: parsed.token,
-      isAdmin: parsed.isAdmin ?? false,
-    };
-  } catch {
-    return null;
-  }
-}
+    if (parsed.iat && Date.now() - parsed.iat > MAX_TOKEN_AGE_MS) {
+      return null; // Token expired
+    }
 
-function parseLegacyToken(token: string): SessionPayload | null {
-  try {
-    const data = Buffer.from(token, "base64").toString("utf-8");
-    const parsed = JSON.parse(data);
-    if (!parsed.userId || !parsed.email || !parsed.token) return null;
     return {
       userId: parsed.userId,
       email: parsed.email,

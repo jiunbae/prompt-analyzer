@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useUser } from "@/contexts/user-context";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface NavItem {
   href: string;
@@ -159,6 +160,26 @@ const adminNavItems: NavItem[] = [
     ),
   },
   {
+    href: "/admin/users",
+    label: "Users",
+    adminOnly: true,
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+        />
+      </svg>
+    ),
+  },
+  {
     href: "/admin/allowlist",
     label: "Allowlist",
     adminOnly: true,
@@ -186,15 +207,16 @@ export function Sidebar() {
   const { user, loading, logout } = useUser();
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-950">
-      <div className="flex h-16 items-center border-b border-zinc-800 px-4">
+    <aside className="flex h-screen w-64 flex-col border-r border-border bg-card">
+      <div className="flex h-16 items-center justify-between border-b border-border px-4">
         <Link href="/prompts" className="block">
           <img
             src="/logo-dark.svg"
             alt="Oh My Prompt"
-            className="h-10 w-auto"
+            className="h-10 w-auto dark:invert-0 invert"
           />
         </Link>
+        <ThemeToggle />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
@@ -209,8 +231,8 @@ export function Sidebar() {
                 text-sm font-medium transition-colors
                 ${
                   isActive
-                    ? "bg-zinc-800 text-zinc-100"
-                    : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                 }
               `}
             >
@@ -224,7 +246,7 @@ export function Sidebar() {
         {user?.isAdmin && (
           <>
             <div className="pt-4 pb-2">
-              <p className="px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <p className="px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Admin
               </p>
             </div>
@@ -239,8 +261,8 @@ export function Sidebar() {
                     text-sm font-medium transition-colors
                     ${
                       isActive
-                        ? "bg-zinc-800 text-zinc-100"
-                        : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                     }
                   `}
                 >
@@ -254,25 +276,25 @@ export function Sidebar() {
       </nav>
 
       {/* User Info Section */}
-      <div className="border-t border-zinc-800 p-4">
+      <div className="border-t border-border p-4">
         {loading ? (
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-zinc-800 animate-pulse" />
+            <div className="h-8 w-8 rounded-full bg-skeleton animate-pulse" />
             <div className="flex-1">
-              <div className="h-4 w-24 bg-zinc-800 rounded animate-pulse" />
+              <div className="h-4 w-24 bg-skeleton rounded animate-pulse" />
             </div>
           </div>
         ) : user ? (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-medium text-white">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
                 {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-zinc-100 truncate">
+                <p className="text-sm font-medium text-foreground truncate">
                   {user.name || user.email.split("@")[0]}
                 </p>
-                <p className="text-xs text-zinc-500 truncate">{user.email}</p>
+                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
               </div>
               {user.isAdmin && (
                 <Badge variant="warning" className="shrink-0">
@@ -282,7 +304,7 @@ export function Sidebar() {
             </div>
             <button
               onClick={logout}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <svg
                 className="h-4 w-4"

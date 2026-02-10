@@ -18,7 +18,18 @@ OMP_BIN="\${OMP_BIN:-omp}"
 
 payload="$(cat || true)"
 if [ -n "$payload" ]; then
-  printf '%s\\n' "$payload" | "$OMP_BIN" ingest --stdin --source claude-code || true
+  # Enrich stdin payload with env vars that Claude Code exposes
+  enriched=$(printf '%s' "$payload" | node -e "
+    let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+      const p=JSON.parse(d);
+      if(!p.project)p.project=process.env.CLAUDE_PROJECT||process.env.PROJECT||'';
+      if(!p.cwd)p.cwd=process.env.PWD||'';
+      if(!p.session_id)p.session_id=process.env.CLAUDE_SESSION_ID||process.env.SESSION_ID||'';
+      if(!p.model)p.model=process.env.CLAUDE_MODEL||process.env.MODEL||'';
+      console.log(JSON.stringify(p));
+    });
+  " 2>/dev/null) || enriched="$payload"
+  printf '%s\\n' "$enriched" | "$OMP_BIN" ingest --stdin --source claude-code || true
   exit 0
 fi
 

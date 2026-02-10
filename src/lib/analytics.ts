@@ -12,7 +12,14 @@ export interface AnalyticsData {
     uniqueProjects: number;
     avgPromptLength: number;
   };
-  dailyStats: Array<{ date: string; count: number; tokens: number }>;
+  responseStats: {
+    totalResponses: number;
+    totalResponseTokens: number;
+    totalResponseChars: number;
+    avgResponseLength: number;
+    responseRate: number;
+  };
+  dailyStats: Array<{ date: string; count: number; tokens: number; inputTokens: number; outputTokens: number }>;
   projectStats: Array<{ project: string | null; count: number; tokens: number }>;
   typeStats: Array<{ type: string | null; count: number }>;
   recentPrompts: Array<{
@@ -21,6 +28,7 @@ export interface AnalyticsData {
     projectName: string | null;
     promptLength: number;
     promptType: string | null;
+    hasResponse: boolean;
   }>;
   projectActivity: Array<{ project: string; count: number }>;
   sessions: {
@@ -90,7 +98,7 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsData
       eq(schema.prompts.promptType, "user_input")
     );
 
-    const [stats, dailySeries, projectStats, typeStats, recentPrompts, projectActivityRows, sessionPromptRows] =
+    const [stats, responseStatsRows, dailySeries, projectStats, typeStats, recentPrompts, projectActivityRows, sessionPromptRows] =
       await Promise.all([
       // Overall stats - filtered by user
       db
@@ -104,11 +112,25 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsData
         .from(schema.prompts)
         .where(userFilter),
 
+      // Response stats - filtered by user
+      db
+        .select({
+          totalResponses: sql<number>`count(response_text)`,
+          totalResponseTokens: sql<number>`coalesce(sum(token_estimate_response), 0)`,
+          totalResponseChars: sql<number>`coalesce(sum(response_length), 0)`,
+          avgResponseLength: sql<number>`coalesce(avg(response_length), 0)`,
+          totalRows: sql<number>`count(*)`,
+        })
+        .from(schema.prompts)
+        .where(userFilter),
+
       db
         .select({
           date: dateExpr,
           count: sql<number>`count(*)`,
           tokens: sql<number>`coalesce(sum(coalesce(token_estimate, 0) + coalesce(token_estimate_response, 0)), 0)`,
+          inputTokens: sql<number>`coalesce(sum(coalesce(token_estimate, 0)), 0)`,
+          outputTokens: sql<number>`coalesce(sum(coalesce(token_estimate_response, 0)), 0)`,
         })
         .from(schema.prompts)
         .where(rangeWhere)
@@ -146,6 +168,7 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsData
           projectName: schema.prompts.projectName,
           promptLength: schema.prompts.promptLength,
           promptType: schema.prompts.promptType,
+          hasResponse: sql<boolean>`response_text is not null`,
         })
         .from(schema.prompts)
         .where(userFilter)
@@ -177,13 +200,20 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsData
     // Fill last 30d daily series (even if some days have no data)
     const dayKeys = getLastNDays(rangeTo, 30);
     const dailyMap = new Map(
-      dailySeries.map((d) => [d.date, { count: Number(d.count ?? 0), tokens: Number(d.tokens ?? 0) }])
+      dailySeries.map((d) => [d.date, {
+        count: Number(d.count ?? 0),
+        tokens: Number(d.tokens ?? 0),
+        inputTokens: Number(d.inputTokens ?? 0),
+        outputTokens: Number(d.outputTokens ?? 0),
+      }])
     );
 
     const dailyStats = dayKeys.map((date) => ({
       date,
       count: dailyMap.get(date)?.count ?? 0,
       tokens: dailyMap.get(date)?.tokens ?? 0,
+      inputTokens: dailyMap.get(date)?.inputTokens ?? 0,
+      outputTokens: dailyMap.get(date)?.outputTokens ?? 0,
     }));
 
     // Session analysis (30-minute gap heuristic)
@@ -213,8 +243,21 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsData
       sessions: sessionsPerDayMap.get(date) ?? 0,
     }));
 
+    const rRow = responseStatsRows[0];
+    const totalRows = Number(rRow?.totalRows ?? 0);
+    const totalResponses = Number(rRow?.totalResponses ?? 0);
+
+    const responseStats = {
+      totalResponses,
+      totalResponseTokens: Number(rRow?.totalResponseTokens ?? 0),
+      totalResponseChars: Number(rRow?.totalResponseChars ?? 0),
+      avgResponseLength: Math.round(Number(rRow?.avgResponseLength ?? 0)),
+      responseRate: totalRows > 0 ? Math.round((totalResponses / totalRows) * 100) : 0,
+    };
+
     return {
       stats: stats[0],
+      responseStats,
       dailyStats,
       projectStats,
       typeStats,

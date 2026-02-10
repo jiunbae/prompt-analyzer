@@ -27,17 +27,17 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
                   style={vscDarkPlus}
                   language={match[1]}
                   PreTag="div"
-                  className="rounded-md border border-zinc-800 my-4"
+                  className="rounded-md border border-border my-4"
                 >
                   {String(children).replace(/\n$/, "")}
                 </SyntaxHighlighter>
               ) : (
-                <pre className="p-4 rounded-md border border-zinc-800 my-4 bg-zinc-900 overflow-x-auto">
+                <pre className="p-4 rounded-md border border-border my-4 bg-surface overflow-x-auto">
                   <code {...rest} className={className}>{children}</code>
                 </pre>
               )
             ) : (
-              <code className={`${className || ""} bg-zinc-800 rounded px-1 py-0.5`} {...rest}>
+              <code className={`${className || ""} bg-secondary rounded px-1 py-0.5`} {...rest}>
                 {children}
               </code>
             );

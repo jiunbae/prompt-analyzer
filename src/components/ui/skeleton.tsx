@@ -5,7 +5,7 @@ type SkeletonProps = HTMLAttributes<HTMLDivElement>;
 function Skeleton({ className = "", ...props }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse rounded-md bg-zinc-800 ${className}`}
+      className={`animate-pulse rounded-md bg-skeleton ${className}`}
       {...props}
     />
   );
@@ -13,7 +13,7 @@ function Skeleton({ className = "", ...props }: SkeletonProps) {
 
 function SkeletonCard() {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+    <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-5 w-16 rounded-full" />
@@ -45,7 +45,7 @@ function SkeletonDetail() {
         <Skeleton className="h-8 w-8" />
         <Skeleton className="h-6 w-48" />
       </div>
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+      <div className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-wrap gap-4 mb-6">
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-5 w-24" />

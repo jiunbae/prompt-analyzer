@@ -15,13 +15,13 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 p-4 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 text-center">
       <div className="space-y-4 max-w-md">
-        <h2 className="text-2xl font-bold text-zinc-100">Something went wrong!</h2>
-        <p className="text-zinc-400 text-sm">
-          The application encountered a server-side error. 
+        <h2 className="text-2xl font-bold text-foreground">Something went wrong!</h2>
+        <p className="text-muted-foreground text-sm">
+          The application encountered a server-side error.
           {error.digest && (
-            <span className="block mt-2 font-mono text-[10px] text-zinc-600">
+            <span className="block mt-2 font-mono text-[10px] text-muted-foreground">
               Digest: {error.digest}
             </span>
           )}
@@ -38,7 +38,7 @@ export default function GlobalError({
           </Button>
         </div>
         {process.env.NODE_ENV === "development" && (
-          <pre className="mt-8 p-4 bg-zinc-900 border border-zinc-800 rounded text-left text-xs text-red-400 overflow-auto max-h-64">
+          <pre className="mt-8 p-4 bg-surface border border-border rounded text-left text-xs text-red-400 overflow-auto max-h-64">
             {error.stack}
           </pre>
         )}

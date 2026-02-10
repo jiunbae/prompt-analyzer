@@ -51,11 +51,11 @@ export function PromptCard({
   tags = [],
 }: PromptCardProps) {
   return (
-    <Link href={`/prompts/${id}`}>
-      <Card className="p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50 cursor-pointer">
+    <Link href={`/prompts/${id}`} className="block">
+      <Card className="p-4 transition-colors hover:border-border hover:bg-accent/50 cursor-pointer">
         <div className="flex items-start justify-between mb-3">
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-500">{formatDate(timestamp)}</span>
+            <span className="text-xs text-muted-foreground">{formatDate(timestamp)}</span>
             {projectName && (
               <Badge variant="secondary" className="w-fit">
                 {projectName}
@@ -65,7 +65,7 @@ export function PromptCard({
           <Badge variant={promptTypeColors[promptType]}>{promptType}</Badge>
         </div>
 
-        <p className="text-sm text-zinc-300 line-clamp-3 mb-3 font-mono">
+        <p className="text-sm text-secondary-foreground line-clamp-3 mb-3 font-mono">
           {preview}
         </p>
 
@@ -87,7 +87,7 @@ export function PromptCard({
               </Badge>
             )}
           </div>
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-muted-foreground">
             {formatTokenCount(tokenCount)} tokens
           </span>
         </div>

@@ -1,4 +1,5 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
 
 type ButtonVariant = "default" | "outline" | "ghost" | "destructive";
 type ButtonSize = "sm" | "md" | "lg";
@@ -10,13 +11,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   default:
-    "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800",
+    "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80",
   outline:
-    "border border-zinc-700 bg-transparent text-zinc-100 hover:bg-zinc-800 active:bg-zinc-700",
+    "border border-border bg-transparent text-foreground hover:bg-accent active:bg-accent/80",
   ghost:
-    "bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 active:bg-zinc-700",
+    "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground active:bg-accent/80",
   destructive:
-    "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
+    "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/80",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
@@ -26,20 +27,18 @@ const sizeStyles: Record<ButtonSize, string> = {
 };
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className = "", variant = "default", size = "md", children, disabled, ...props }, ref) => {
+  ({ className, variant = "default", size = "md", children, disabled, ...props }, ref) => {
     return (
       <button
         ref={ref}
-        className={`
-          inline-flex items-center justify-center gap-2
-          rounded-md font-medium
-          transition-colors duration-150
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900
-          disabled:pointer-events-none disabled:opacity-50
-          ${variantStyles[variant]}
-          ${sizeStyles[size]}
-          ${className}
-        `}
+        className={cn(
+          "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors duration-150",
+          "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background",
+          "disabled:pointer-events-none disabled:opacity-50",
+          variantStyles[variant],
+          sizeStyles[size],
+          className
+        )}
         disabled={disabled}
         {...props}
       >

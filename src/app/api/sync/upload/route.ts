@@ -17,17 +17,17 @@ const uploadRecordSchema = z.object({
   response_length: z.number().nullish(),
   project: z.string().nullish(),
   cwd: z.string().nullish(),
-  source: z.string().optional(),
+  source: z.string().nullish(),
   session_id: z.string().nullish(),
-  role: z.string().optional(),
+  role: z.string().nullish(),
   model: z.string().nullish(),
-  cli_name: z.string().optional(),
+  cli_name: z.string().nullish(),
   cli_version: z.string().nullish(),
-  token_estimate: z.number().optional(),
+  token_estimate: z.number().nullish(),
   token_estimate_response: z.number().nullish(),
-  word_count: z.number().optional(),
+  word_count: z.number().nullish(),
   word_count_response: z.number().nullish(),
-  content_hash: z.string().optional(),
+  content_hash: z.string().nullish(),
 });
 
 const uploadBodySchema = z.object({

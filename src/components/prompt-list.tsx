@@ -76,7 +76,7 @@ export function PromptList({
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <svg
-          className="h-16 w-16 text-zinc-600 mb-4"
+          className="h-16 w-16 text-muted-foreground mb-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -89,10 +89,10 @@ export function PromptList({
             d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
           />
         </svg>
-        <h3 className="text-lg font-medium text-zinc-300 mb-2">
+        <h3 className="text-lg font-medium text-foreground mb-2">
           No prompts found
         </h3>
-        <p className="text-sm text-zinc-500 max-w-sm">
+        <p className="text-sm text-muted-foreground max-w-sm">
           Start capturing your prompts to see your history appear here.
         </p>
       </div>
@@ -103,14 +103,14 @@ export function PromptList({
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-end">
         <div className="flex gap-2">
-          <div className="flex rounded-md border border-zinc-700">
+          <div className="flex rounded-md border border-border">
             <button
               type="button"
               onClick={() => handleSortChange("date")}
               className={`px-3 py-1.5 text-sm ${
                 sortBy === "date"
-                  ? "bg-zinc-700 text-zinc-100"
-                  : "text-zinc-400 hover:text-zinc-100"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Date
@@ -118,24 +118,24 @@ export function PromptList({
             <button
               type="button"
               onClick={() => handleSortChange("tokens")}
-              className={`px-3 py-1.5 text-sm border-l border-zinc-700 ${
+              className={`px-3 py-1.5 text-sm border-l border-border ${
                 sortBy === "tokens"
-                  ? "bg-zinc-700 text-zinc-100"
-                  : "text-zinc-400 hover:text-zinc-100"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Tokens
             </button>
           </div>
 
-          <div className="flex rounded-md border border-zinc-700">
+          <div className="flex rounded-md border border-border">
             <button
               type="button"
               onClick={() => setViewMode("grid")}
               className={`px-2 py-1.5 ${
                 viewMode === "grid"
-                  ? "bg-zinc-700 text-zinc-100"
-                  : "text-zinc-400 hover:text-zinc-100"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
               aria-label="Grid view"
             >
@@ -152,10 +152,10 @@ export function PromptList({
             <button
               type="button"
               onClick={() => setViewMode("list")}
-              className={`px-2 py-1.5 border-l border-zinc-700 ${
+              className={`px-2 py-1.5 border-l border-border ${
                 viewMode === "list"
-                  ? "bg-zinc-700 text-zinc-100"
-                  : "text-zinc-400 hover:text-zinc-100"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
               aria-label="List view"
             >
@@ -186,8 +186,8 @@ export function PromptList({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-          <span className="text-sm text-zinc-500">
+        <div className="flex items-center justify-between pt-4 border-t border-border">
+          <span className="text-sm text-muted-foreground">
             Showing {(currentPage - 1) * pageSize + 1}-
             {Math.min(currentPage * pageSize, totalCount)} of {totalCount}
           </span>

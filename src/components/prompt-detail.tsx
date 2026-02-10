@@ -57,7 +57,7 @@ function formatTokenCount(count: number): string {
 const roleColors: Record<string, string> = {
   user: "text-blue-400",
   assistant: "text-green-400",
-  system: "text-zinc-400",
+  system: "text-muted-foreground",
 };
 
 const roleLabels: Record<string, string> = {
@@ -126,7 +126,7 @@ export function PromptDetail({
       <div className="flex items-center justify-between">
         <Link
           href="/prompts"
-          className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <svg
             className="h-4 w-4"
@@ -212,20 +212,20 @@ export function PromptDetail({
       </div>
 
       <Card>
-        <CardHeader className="border-b border-zinc-800">
+        <CardHeader className="border-b border-border">
           <div className="flex flex-wrap items-center gap-4 text-sm">
             {sessionId && (
-              <div className="flex items-center gap-2 text-zinc-400">
-                <span className="font-medium text-zinc-300">Session:</span>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="font-medium text-secondary-foreground">Session:</span>
                 <Link
                   href={`/sessions/${sessionId}`}
-                  className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                  className="rounded bg-secondary px-2 py-0.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
                 >
                   View full session
                 </Link>
               </div>
             )}
-            <div className="flex items-center gap-2 text-zinc-400">
+            <div className="flex items-center gap-2 text-muted-foreground">
             <svg
               className="h-4 w-4"
               fill="none"
@@ -253,22 +253,22 @@ export function PromptDetail({
             )}
           </div>
           {workingDirectory && (
-            <div className="mt-2 text-xs text-zinc-500 font-mono truncate" title={workingDirectory}>
+            <div className="mt-2 text-xs text-muted-foreground font-mono truncate" title={workingDirectory}>
               📁 {workingDirectory}
             </div>
           )}
           <div className="flex flex-wrap gap-4 mt-4 text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">Input:</span>
-              <span className="text-zinc-300">{formatTokenCount(inputTokens)} tokens</span>
+              <span className="text-muted-foreground">Input:</span>
+              <span className="text-secondary-foreground">{formatTokenCount(inputTokens)} tokens</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">Output:</span>
-              <span className="text-zinc-300">{formatTokenCount(outputTokens)} tokens</span>
+              <span className="text-muted-foreground">Output:</span>
+              <span className="text-secondary-foreground">{formatTokenCount(outputTokens)} tokens</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">Total:</span>
-              <span className="font-medium text-zinc-100">{formatTokenCount(totalTokens)} tokens</span>
+              <span className="text-muted-foreground">Total:</span>
+              <span className="font-medium text-foreground">{formatTokenCount(totalTokens)} tokens</span>
             </div>
           </div>
           {tags.length > 0 && (
@@ -286,7 +286,7 @@ export function PromptDetail({
           )}
         </CardHeader>
         <CardContent className="p-0">
-          <div className="divide-y divide-zinc-800">
+          <div className="divide-y divide-border">
             {messages.map((message) => (
               <div key={message.timestamp?.getTime() || message.content} className="p-6">
                 <div className="flex items-center gap-2 mb-3">
@@ -294,12 +294,12 @@ export function PromptDetail({
                     {roleLabels[message.role]}
                   </span>
                   {message.timestamp && (
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs text-muted-foreground">
                       {formatDate(message.timestamp)}
                     </span>
                   )}
                   {message.tokens && (
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs text-muted-foreground">
                       {formatTokenCount(message.tokens)} tokens
                     </span>
                   )}

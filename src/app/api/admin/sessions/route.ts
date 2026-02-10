@@ -21,8 +21,11 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId") || null;
+    const search = searchParams.get("search") || null;
     const project = searchParams.get("project") || null;
     const source = searchParams.get("source") || null;
+    const device = searchParams.get("device") || null;
+    const workspace = searchParams.get("workspace") || null;
     const from = searchParams.get("from") || null;
     const to = searchParams.get("to") || null;
     const page = parseInt(searchParams.get("page") ?? "1", 10);
@@ -43,8 +46,11 @@ export async function GET(request: NextRequest) {
       ];
 
       if (userId) conditions.push(eq(schema.prompts.userId, userId));
+      if (search) conditions.push(sql`${schema.prompts.searchVector} @@ websearch_to_tsquery('english', ${search})`);
       if (project) conditions.push(eq(schema.prompts.projectName, project));
       if (source) conditions.push(eq(schema.prompts.source, source));
+      if (device) conditions.push(eq(schema.prompts.deviceName, device));
+      if (workspace) conditions.push(eq(schema.prompts.workingDirectory, workspace));
       if (from) conditions.push(gte(schema.prompts.timestamp, new Date(from)));
       if (to) {
         const toDate = new Date(to);
@@ -53,8 +59,11 @@ export async function GET(request: NextRequest) {
       }
 
       const whereClause = and(...conditions);
+      const baseConditions = and(
+        sql`${schema.prompts.sessionId} IS NOT NULL`,
+      );
 
-      const [sessionsResult, countResult] = await Promise.all([
+      const [sessionsResult, countResult, usersResult, projectsResult, sourcesResult, devicesResult, workspacesResult] = await Promise.all([
         db.execute(sql`
           SELECT
             ${schema.prompts.sessionId} as session_id,
@@ -79,6 +88,39 @@ export async function GET(request: NextRequest) {
           FROM ${schema.prompts}
           WHERE ${whereClause}
         `),
+        db
+          .select({
+            id: schema.users.id,
+            name: schema.users.name,
+            email: schema.users.email,
+          })
+          .from(schema.users)
+          .orderBy(schema.users.email),
+        db
+          .select({ name: schema.prompts.projectName, count: sql<number>`count(distinct ${schema.prompts.sessionId})` })
+          .from(schema.prompts)
+          .where(and(baseConditions, sql`${schema.prompts.projectName} IS NOT NULL`))
+          .groupBy(schema.prompts.projectName)
+          .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`)),
+        db
+          .select({ name: schema.prompts.source, count: sql<number>`count(distinct ${schema.prompts.sessionId})` })
+          .from(schema.prompts)
+          .where(and(baseConditions, sql`${schema.prompts.source} IS NOT NULL`))
+          .groupBy(schema.prompts.source)
+          .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`)),
+        db
+          .select({ name: schema.prompts.deviceName, count: sql<number>`count(distinct ${schema.prompts.sessionId})` })
+          .from(schema.prompts)
+          .where(and(baseConditions, sql`${schema.prompts.deviceName} IS NOT NULL`))
+          .groupBy(schema.prompts.deviceName)
+          .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`)),
+        db
+          .select({ name: schema.prompts.workingDirectory, count: sql<number>`count(distinct ${schema.prompts.sessionId})` })
+          .from(schema.prompts)
+          .where(and(baseConditions, sql`${schema.prompts.workingDirectory} IS NOT NULL AND ${schema.prompts.workingDirectory} != 'unknown'`))
+          .groupBy(schema.prompts.workingDirectory)
+          .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`))
+          .limit(50),
       ]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,6 +143,11 @@ export async function GET(request: NextRequest) {
           totalTokens: row.total_tokens,
         })),
         totalCount: Number(cRows[0]?.count ?? 0),
+        users: usersResult,
+        projects: projectsResult.map((p) => ({ name: p.name ?? "", count: Number(p.count) })),
+        sources: sourcesResult.map((s) => ({ name: s.name ?? "", count: Number(s.count) })),
+        devices: devicesResult.map((d) => ({ name: d.name ?? "", count: Number(d.count) })),
+        workspaces: workspacesResult.map((w) => ({ name: w.name ?? "", count: Number(w.count) })),
       });
     } finally {
       await client.end();

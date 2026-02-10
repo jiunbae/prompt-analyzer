@@ -95,7 +95,7 @@ export async function processUpload(
             promptText: record.prompt_text,
             responseText: record.response_text || undefined,
             responseLength: record.response_length || undefined,
-            projectName: record.project || null,
+            projectName: record.project || (record.cwd ? record.cwd.split("/").pop() || null : null),
             promptType,
             userId,
             source: record.source || undefined,

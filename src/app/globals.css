@@ -1,9 +1,29 @@
 @import "tailwindcss";
 
 :root {
-  /* Light theme colors (unused - dark mode is default) */
+  /* Light theme */
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --card-foreground: #09090b;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #3f3f46;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e4e4e7;
+  --ring: #2563eb;
+  --surface: #f4f4f5;
+  --surface-secondary: #e4e4e7;
+  --input-bg: #ffffff;
+  --skeleton: #e4e4e7;
+  --scrollbar-thumb: #d4d4d8;
+  --scrollbar-thumb-hover: #a1a1aa;
 
   /* Border radius */
   --radius-sm: 0.25rem;
@@ -12,9 +32,7 @@
   --radius-full: 9999px;
 }
 
-/* Dark theme (default) */
-.dark,
-:root {
+.dark {
   --background: #09090b;
   --foreground: #fafafa;
   --card: #18181b;
@@ -31,6 +49,12 @@
   --destructive-foreground: #fafafa;
   --border: #27272a;
   --ring: #3b82f6;
+  --surface: #18181b;
+  --surface-secondary: #27272a;
+  --input-bg: #18181b;
+  --skeleton: #27272a;
+  --scrollbar-thumb: #3f3f46;
+  --scrollbar-thumb-hover: #52525b;
 }
 
 @theme inline {
@@ -50,12 +74,16 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-input-bg: var(--input-bg);
+  --color-skeleton: var(--skeleton);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 body {
@@ -75,12 +103,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Code blocks */
@@ -108,11 +136,32 @@ code {
   overflow: hidden;
 }
 
-/* Prose styling for dark mode */
+/* Prose styling */
 .prose-invert {
   --tw-prose-body: #d4d4d8;
   --tw-prose-headings: #fafafa;
   --tw-prose-links: #60a5fa;
   --tw-prose-code: #fafafa;
   --tw-prose-pre-bg: #27272a;
+}
+
+:root .prose-invert {
+  --tw-prose-body: #3f3f46;
+  --tw-prose-headings: #09090b;
+  --tw-prose-links: #2563eb;
+  --tw-prose-code: #18181b;
+  --tw-prose-pre-bg: #f4f4f5;
+}
+
+.dark .prose-invert {
+  --tw-prose-body: #d4d4d8;
+  --tw-prose-headings: #fafafa;
+  --tw-prose-links: #60a5fa;
+  --tw-prose-code: #fafafa;
+  --tw-prose-pre-bg: #27272a;
+}
+
+/* Native select styling for light theme */
+select {
+  color-scheme: inherit;
 }

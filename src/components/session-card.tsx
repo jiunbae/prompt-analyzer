@@ -51,30 +51,30 @@ export function SessionCard({
   totalTokens,
 }: SessionCardProps) {
   return (
-    <Link href={`/sessions/${sessionId}`}>
-      <Card className="transition-colors hover:bg-zinc-800/50 cursor-pointer">
+    <Link href={`/sessions/${sessionId}`} className="block">
+      <Card className="transition-colors hover:bg-accent/50 cursor-pointer">
         <CardContent className="p-4">
-          <p className="text-sm text-zinc-200 line-clamp-2 mb-3">
+          <p className="text-sm text-foreground line-clamp-2 mb-3">
             {firstPrompt || "Empty prompt"}
           </p>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{formatDate(startedAt)}</span>
-            <span className="text-zinc-600">·</span>
+            <span className="text-muted-foreground/50">·</span>
             <span>{formatDuration(startedAt, endedAt)}</span>
-            <span className="text-zinc-600">·</span>
+            <span className="text-muted-foreground/50">·</span>
             <span>
               {promptCount} prompt{promptCount !== 1 ? "s" : ""}
             </span>
             {responseCount > 0 && (
               <>
-                <span className="text-zinc-600">·</span>
+                <span className="text-muted-foreground/50">·</span>
                 <span>{responseCount} response{responseCount !== 1 ? "s" : ""}</span>
               </>
             )}
             {totalTokens != null && totalTokens > 0 && (
               <>
-                <span className="text-zinc-600">·</span>
+                <span className="text-muted-foreground/50">·</span>
                 <span>{formatTokens(totalTokens)} tokens</span>
               </>
             )}

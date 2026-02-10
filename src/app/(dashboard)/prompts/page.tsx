@@ -159,12 +159,15 @@ export default async function PromptsPage({
 
   if (error) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-semibold text-zinc-100">Prompts</h1>
-        <p className="text-red-400 mt-4">
-          Error loading prompts. This might be due to a database schema mismatch. 
-          Please ensure all migrations have been applied.
-        </p>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Prompts</h1>
+          <p className="text-sm text-muted-foreground mt-1">Browse and search your prompt history</p>
+        </div>
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+          <p className="font-medium">Failed to load prompts</p>
+          <p className="mt-1 text-red-400/80">A database error occurred. Please try again later.</p>
+        </div>
       </div>
     );
   }
@@ -174,8 +177,8 @@ export default async function PromptsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-100">Prompts</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-semibold text-foreground">Prompts</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Browse and search your prompt history ({totalCount} total)
         </p>
       </div>

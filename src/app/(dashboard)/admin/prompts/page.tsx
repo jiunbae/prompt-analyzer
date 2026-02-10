@@ -74,7 +74,7 @@ export default function AdminPromptsPageWrapper() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-400" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-muted-foreground" />
         </div>
       }
     >
@@ -195,7 +195,7 @@ function AdminPromptsPage() {
   if (userLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-400" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-muted-foreground" />
       </div>
     );
   }
@@ -208,8 +208,8 @@ function AdminPromptsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-100">All Prompts</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-semibold text-foreground">All Prompts</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Browse prompts across all users ({totalCount} total)
         </p>
       </div>
@@ -217,14 +217,14 @@ function AdminPromptsPage() {
       {/* Top filters: User + Device */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="space-y-1">
-          <label htmlFor="user-filter" className="text-xs text-zinc-400 font-medium">
+          <label htmlFor="user-filter" className="text-xs text-muted-foreground font-medium">
             User
           </label>
           <select
             id="user-filter"
             value={currentUserId}
             onChange={(e) => updateParams({ userId: e.target.value || undefined })}
-            className="w-full sm:w-64 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-md text-zinc-100 text-sm"
+            className="w-full sm:w-64 px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
           >
             <option value="">All users</option>
             {users.map((u) => (
@@ -236,14 +236,14 @@ function AdminPromptsPage() {
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="device-filter" className="text-xs text-zinc-400 font-medium">
+          <label htmlFor="device-filter" className="text-xs text-muted-foreground font-medium">
             Device
           </label>
           <select
             id="device-filter"
             value={currentDevice}
             onChange={(e) => updateParams({ device: e.target.value || undefined })}
-            className="w-full sm:w-64 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-md text-zinc-100 text-sm"
+            className="w-full sm:w-64 px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
           >
             <option value="">All devices</option>
             {devices.map((d) => (
@@ -255,14 +255,14 @@ function AdminPromptsPage() {
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="workspace-filter" className="text-xs text-zinc-400 font-medium">
+          <label htmlFor="workspace-filter" className="text-xs text-muted-foreground font-medium">
             Workspace
           </label>
           <select
             id="workspace-filter"
             value={currentWorkspace}
             onChange={(e) => updateParams({ workspace: e.target.value || undefined })}
-            className="w-full sm:w-64 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-md text-zinc-100 text-sm"
+            className="w-full sm:w-64 px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
           >
             <option value="">All workspaces</option>
             {workspaces.map((w) => (
@@ -279,7 +279,7 @@ function AdminPromptsPage() {
         <form onSubmit={handleSearch} className="flex gap-2">
           <div className="relative flex-1">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500"
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -296,7 +296,7 @@ function AdminPromptsPage() {
               placeholder="Search prompts..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-10 bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+              className="pl-10"
             />
           </div>
           <Button type="submit">Search</Button>
@@ -304,7 +304,7 @@ function AdminPromptsPage() {
             type="button"
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}
-            className="border-zinc-700"
+            className=""
           >
             <svg
               className={`h-4 w-4 transition-transform ${showFilters ? "rotate-180" : ""}`}
@@ -319,14 +319,14 @@ function AdminPromptsPage() {
         </form>
 
         {showFilters && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-surface/50 rounded-lg border border-border">
             <div className="space-y-1">
-              <label htmlFor="adm-project-filter" className="text-xs text-zinc-400 font-medium">Project</label>
+              <label htmlFor="adm-project-filter" className="text-xs text-muted-foreground font-medium">Project</label>
               <select
                 id="adm-project-filter"
                 value={currentProject}
                 onChange={(e) => updateParams({ project: e.target.value || undefined })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-md text-zinc-100 text-sm"
+                className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
               >
                 <option value="">All projects</option>
                 {projects.map((p) => (
@@ -338,12 +338,12 @@ function AdminPromptsPage() {
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="adm-type-filter" className="text-xs text-zinc-400 font-medium">Type</label>
+              <label htmlFor="adm-type-filter" className="text-xs text-muted-foreground font-medium">Type</label>
               <select
                 id="adm-type-filter"
                 value={currentType}
                 onChange={(e) => updateParams({ type: e.target.value || undefined })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-md text-zinc-100 text-sm"
+                className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
               >
                 <option value="">All types</option>
                 <option value="user_input">User Input</option>
@@ -353,38 +353,38 @@ function AdminPromptsPage() {
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="adm-from-filter" className="text-xs text-zinc-400 font-medium">From Date</label>
+              <label htmlFor="adm-from-filter" className="text-xs text-muted-foreground font-medium">From Date</label>
               <input
                 id="adm-from-filter"
                 type="date"
                 value={currentFrom}
                 onChange={(e) => updateParams({ from: e.target.value || undefined })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-md text-zinc-100 text-sm"
+                className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
               />
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="adm-to-filter" className="text-xs text-zinc-400 font-medium">To Date</label>
+              <label htmlFor="adm-to-filter" className="text-xs text-muted-foreground font-medium">To Date</label>
               <input
                 id="adm-to-filter"
                 type="date"
                 value={currentTo}
                 onChange={(e) => updateParams({ to: e.target.value || undefined })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-md text-zinc-100 text-sm"
+                className="w-full px-3 py-2 bg-input-bg border border-border rounded-md text-foreground text-sm"
               />
             </div>
 
             {tags.length > 0 && (
               <div className="space-y-1 col-span-2 md:col-span-4">
-                <label className="text-xs text-zinc-400 font-medium">Tag</label>
+                <label className="text-xs text-muted-foreground font-medium">Tag</label>
                 <div className="flex flex-wrap gap-2 mt-1">
                   <button
                     type="button"
                     onClick={() => updateParams({ tag: undefined })}
                     className={`px-2 py-1 rounded text-xs transition-colors ${
                       !currentTag
-                        ? "bg-zinc-700 text-zinc-100 ring-1 ring-zinc-500"
-                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+                        ? "bg-accent text-foreground ring-1 ring-border"
+                        : "bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground"
                     }`}
                   >
                     All
@@ -396,7 +396,7 @@ function AdminPromptsPage() {
                       onClick={() => updateParams({ tag: t.name })}
                       className={`px-2 py-1 rounded text-xs transition-colors ${
                         currentTag === t.name
-                          ? "ring-1 ring-zinc-300 shadow-sm"
+                          ? "ring-1 ring-border shadow-sm"
                           : "opacity-70 hover:opacity-100"
                       }`}
                       style={{
@@ -421,7 +421,7 @@ function AdminPromptsPage() {
         {/* Active filter badges */}
         {hasFilters && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-zinc-500">Active filters:</span>
+            <span className="text-xs text-muted-foreground">Active filters:</span>
             {currentUserId && (
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/20 text-blue-300 rounded-full text-xs">
                 User: {users.find((u) => u.id === currentUserId)?.email ?? currentUserId}
@@ -480,7 +480,7 @@ function AdminPromptsPage() {
             <button
               type="button"
               onClick={handleClearFilters}
-              className="text-xs text-zinc-400 hover:text-zinc-200 underline"
+              className="text-xs text-muted-foreground hover:text-foreground underline"
             >
               Clear all
             </button>
@@ -500,10 +500,10 @@ function AdminPromptsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <Card key={i} className="p-4 animate-pulse">
-              <div className="h-4 w-24 bg-zinc-800 rounded mb-3" />
-              <div className="h-3 w-full bg-zinc-800 rounded mb-2" />
-              <div className="h-3 w-3/4 bg-zinc-800 rounded mb-2" />
-              <div className="h-3 w-1/2 bg-zinc-800 rounded" />
+              <div className="h-4 w-24 bg-skeleton rounded mb-3" />
+              <div className="h-3 w-full bg-skeleton rounded mb-2" />
+              <div className="h-3 w-3/4 bg-skeleton rounded mb-2" />
+              <div className="h-3 w-1/2 bg-skeleton rounded" />
             </Card>
           ))}
         </div>
@@ -513,7 +513,7 @@ function AdminPromptsPage() {
       {!loading && prompts.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <svg
-            className="h-16 w-16 text-zinc-600 mb-4"
+            className="h-16 w-16 text-muted-foreground mb-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -525,8 +525,8 @@ function AdminPromptsPage() {
               d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
             />
           </svg>
-          <h3 className="text-lg font-medium text-zinc-300 mb-2">No prompts found</h3>
-          <p className="text-sm text-zinc-500">
+          <h3 className="text-lg font-medium text-secondary-foreground mb-2">No prompts found</h3>
+          <p className="text-sm text-muted-foreground">
             {hasFilters ? "Try adjusting your filters." : "No prompts have been synced yet."}
           </p>
         </div>
@@ -537,11 +537,11 @@ function AdminPromptsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {prompts.map((prompt) => (
             <Link key={prompt.id} href={`/prompts/${prompt.id}`}>
-              <Card className="p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50 cursor-pointer h-full flex flex-col">
+              <Card className="p-4 transition-colors hover:border-border hover:bg-accent/50 cursor-pointer h-full flex flex-col">
                 {/* Header: timestamp + user + device */}
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex flex-col gap-1 min-w-0">
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs text-muted-foreground">
                       {formatDate(prompt.timestamp)}
                     </span>
                     {prompt.user && (
@@ -559,7 +559,7 @@ function AdminPromptsPage() {
                         </span>
                       )}
                       {prompt.source && (
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs text-muted-foreground">
                           {prompt.source}
                         </span>
                       )}
@@ -579,13 +579,13 @@ function AdminPromptsPage() {
 
                 {/* Workspace */}
                 {prompt.workingDirectory && prompt.workingDirectory !== "unknown" && (
-                  <div className="text-xs text-zinc-500 mb-2 font-mono truncate" title={prompt.workingDirectory}>
+                  <div className="text-xs text-muted-foreground mb-2 font-mono truncate" title={prompt.workingDirectory}>
                     {shortenPath(prompt.workingDirectory)}
                   </div>
                 )}
 
                 {/* Preview */}
-                <p className="text-sm text-zinc-300 line-clamp-3 mb-3 font-mono flex-1">
+                <p className="text-sm text-secondary-foreground line-clamp-3 mb-3 font-mono flex-1">
                   {prompt.preview}
                 </p>
 
@@ -611,7 +611,7 @@ function AdminPromptsPage() {
                       </Badge>
                     ))}
                   </div>
-                  <span className="text-xs text-zinc-500">
+                  <span className="text-xs text-muted-foreground">
                     {formatTokenCount(prompt.tokenCount)} tokens
                   </span>
                 </div>
@@ -623,8 +623,8 @@ function AdminPromptsPage() {
 
       {/* Pagination */}
       {!loading && totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
-          <span className="text-sm text-zinc-500">
+        <div className="flex items-center justify-between pt-4 border-t border-border">
+          <span className="text-sm text-muted-foreground">
             Showing {(currentPage - 1) * pageSize + 1}-
             {Math.min(currentPage * pageSize, totalCount)} of {totalCount}
           </span>

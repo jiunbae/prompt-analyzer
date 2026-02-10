@@ -11,6 +11,8 @@ interface SearchParams {
   search?: string;
   project?: string;
   source?: string;
+  device?: string;
+  workspace?: string;
   from?: string;
   to?: string;
 }
@@ -37,7 +39,7 @@ interface SessionRow {
 
 async function getSessions(params: SearchParams, userId: string) {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return { sessions: [], totalCount: 0, projects: [], sources: [] };
+  if (!connectionString) return { sessions: [], totalCount: 0, projects: [], sources: [], devices: [], workspaces: [] };
 
   const { drizzle } = await import("drizzle-orm/postgres-js");
   const postgresModule = await import("postgres");
@@ -58,6 +60,8 @@ async function getSessions(params: SearchParams, userId: string) {
 
   if (params.project) conditions.push(eq(schema.prompts.projectName, params.project));
   if (params.source) conditions.push(eq(schema.prompts.source, params.source));
+  if (params.device) conditions.push(eq(schema.prompts.deviceName, params.device));
+  if (params.workspace) conditions.push(eq(schema.prompts.workingDirectory, params.workspace));
   if (params.from) conditions.push(gte(schema.prompts.timestamp, new Date(params.from)));
   if (params.to) {
     const toDate = new Date(params.to);
@@ -79,7 +83,7 @@ async function getSessions(params: SearchParams, userId: string) {
   );
 
   try {
-    const [sessionsResult, countResult, projectsResult, sourcesResult] = await Promise.all([
+    const [sessionsResult, countResult, projectsResult, sourcesResult, devicesResult, workspacesResult] = await Promise.all([
       db.execute(sql`
         SELECT
           ${schema.prompts.sessionId} as session_id,
@@ -115,6 +119,19 @@ async function getSessions(params: SearchParams, userId: string) {
         .where(and(baseConditions, sql`${schema.prompts.source} IS NOT NULL`))
         .groupBy(schema.prompts.source)
         .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`)),
+      db
+        .select({ name: schema.prompts.deviceName, count: sql<number>`count(distinct ${schema.prompts.sessionId})` })
+        .from(schema.prompts)
+        .where(and(baseConditions, sql`${schema.prompts.deviceName} IS NOT NULL`))
+        .groupBy(schema.prompts.deviceName)
+        .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`)),
+      db
+        .select({ name: schema.prompts.workingDirectory, count: sql<number>`count(distinct ${schema.prompts.sessionId})` })
+        .from(schema.prompts)
+        .where(and(baseConditions, sql`${schema.prompts.workingDirectory} IS NOT NULL AND ${schema.prompts.workingDirectory} != 'unknown'`))
+        .groupBy(schema.prompts.workingDirectory)
+        .orderBy(desc(sql`count(distinct ${schema.prompts.sessionId})`))
+        .limit(50),
     ]);
 
     await client.end();
@@ -128,11 +145,13 @@ async function getSessions(params: SearchParams, userId: string) {
       totalCount: Number((cRows[0] as Record<string, unknown>)?.count ?? 0),
       projects: projectsResult.map((p) => ({ name: p.name ?? "", count: Number(p.count) })),
       sources: sourcesResult.map((s) => ({ name: s.name ?? "", count: Number(s.count) })),
+      devices: devicesResult.map((d) => ({ name: d.name ?? "", count: Number(d.count) })),
+      workspaces: workspacesResult.map((w) => ({ name: w.name ?? "", count: Number(w.count) })),
     };
   } catch (error) {
     console.error("Sessions query error:", error);
     await client.end();
-    return { sessions: [], totalCount: 0, projects: [], sources: [] };
+    return { sessions: [], totalCount: 0, projects: [], sources: [], devices: [], workspaces: [], error: true };
   }
 }
 
@@ -145,7 +164,7 @@ export default async function SessionsPage({
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const { sessions, totalCount, projects, sources } = await getSessions(params, user.userId);
+  const { sessions, totalCount, projects, sources, devices, workspaces, error } = await getSessions(params, user.userId);
   const currentPage = parseInt(params.page ?? "1", 10);
   const pageSize = 20;
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -156,6 +175,8 @@ export default async function SessionsPage({
     if (params.search) p.set("search", params.search);
     if (params.project) p.set("project", params.project);
     if (params.source) p.set("source", params.source);
+    if (params.device) p.set("device", params.device);
+    if (params.workspace) p.set("workspace", params.workspace);
     if (params.from) p.set("from", params.from);
     if (params.to) p.set("to", params.to);
     const qs = p.toString();
@@ -165,8 +186,8 @@ export default async function SessionsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-100">Sessions</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-semibold text-foreground">Sessions</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Browse your Claude Code sessions ({totalCount} total)
         </p>
       </div>
@@ -174,15 +195,24 @@ export default async function SessionsPage({
       <SessionFilters
         projects={projects}
         sources={sources}
+        devices={devices}
+        workspaces={workspaces}
         currentSearch={params.search}
         currentProject={params.project}
         currentSource={params.source}
+        currentDevice={params.device}
+        currentWorkspace={params.workspace}
         currentFrom={params.from}
         currentTo={params.to}
       />
 
-      {sessions.length === 0 ? (
-        <div className="text-center py-12 text-zinc-500">
+      {error ? (
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+          <p className="font-medium">Failed to load sessions</p>
+          <p className="mt-1 text-red-400/80">A database error occurred. Please try again later.</p>
+        </div>
+      ) : sessions.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
           <p>No sessions found.</p>
           <p className="text-sm mt-1">Sessions are created when prompts share a session ID.</p>
         </div>
@@ -211,18 +241,18 @@ export default async function SessionsPage({
           {currentPage > 1 && (
             <Link
               href={buildPageUrl(currentPage - 1)}
-              className="px-3 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="px-3 py-2 text-sm rounded-lg border border-border text-secondary-foreground hover:bg-accent"
             >
               Previous
             </Link>
           )}
-          <span className="text-sm text-zinc-400">
+          <span className="text-sm text-muted-foreground">
             Page {currentPage} of {totalPages}
           </span>
           {currentPage < totalPages && (
             <Link
               href={buildPageUrl(currentPage + 1)}
-              className="px-3 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="px-3 py-2 text-sm rounded-lg border border-border text-secondary-foreground hover:bg-accent"
             >
               Next
             </Link>

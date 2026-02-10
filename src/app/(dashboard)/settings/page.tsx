@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { useUser } from "@/contexts/user-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,23 +9,26 @@ import { Input } from "@/components/ui/input";
 
 export default function SettingsPage() {
   const { user, loading, refetch } = useUser();
+  const { theme, setTheme } = useTheme();
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   const regenerateToken = async () => {
     setRegenerating(true);
+    setTokenError(null);
     try {
       const res = await fetch("/api/auth/regenerate-token", { method: "POST" });
       if (res.ok) {
         await refetch();
         setShowConfirm(false);
       } else {
-        const data = await res.json();
-        alert(data.error || "Failed to regenerate token");
+        const data = await res.json().catch(() => ({}));
+        setTokenError(data.error || "Failed to regenerate token");
       }
     } catch {
-      alert("Failed to regenerate token");
+      setTokenError("Failed to regenerate token. Please check your connection.");
     } finally {
       setRegenerating(false);
     }
@@ -41,8 +45,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-100">Settings</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Configure your prompt workspace
         </p>
       </div>
@@ -58,7 +62,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {loading ? (
-              <div className="h-10 bg-zinc-800 rounded animate-pulse max-w-md" />
+              <div className="h-10 bg-skeleton rounded animate-pulse max-w-md" />
             ) : user?.token ? (
               <>
                 <div className="flex gap-3">
@@ -104,18 +108,24 @@ export default function SettingsPage() {
                     )}
                   </Button>
                 </div>
-                <div className="bg-zinc-800/50 rounded-lg p-4 text-sm text-zinc-400">
-                  <p className="font-medium text-zinc-300 mb-2">Quick Setup (Recommended)</p>
+                <div className="bg-surface/50 rounded-lg p-4 text-sm text-muted-foreground">
+                  <p className="font-medium text-secondary-foreground mb-2">Quick Setup (Recommended)</p>
                   <p className="mb-2">
                     Run the CLI setup wizard to automatically configure your prompt capture hook:
                   </p>
-                  <pre className="bg-zinc-900 p-3 rounded text-xs overflow-x-auto">
+                  <pre className="bg-surface p-3 rounded text-xs overflow-x-auto">
 {`omp setup`}
                   </pre>
                 </div>
 
+                {tokenError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                    {tokenError}
+                  </div>
+                )}
+
                 {/* Regenerate Token */}
-                <div className="pt-4 border-t border-zinc-800">
+                <div className="pt-4 border-t border-border">
                   {showConfirm ? (
                     <div className="bg-red-900/20 border border-red-800 rounded-lg p-4">
                       <p className="text-red-300 text-sm mb-3">
@@ -165,7 +175,7 @@ export default function SettingsPage() {
                 </div>
               </>
             ) : (
-              <p className="text-zinc-500">No token available</p>
+              <p className="text-muted-foreground">No token available</p>
             )}
           </CardContent>
         </Card>
@@ -179,20 +189,20 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-300">
+              <label className="text-sm font-medium text-secondary-foreground">
                 Items per page
               </label>
-              <select className="flex h-10 w-full max-w-xs rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <select className="flex h-10 w-full max-w-xs rounded-md border border-border bg-input-bg px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring">
                 <option value="12">12</option>
                 <option value="24">24</option>
                 <option value="48">48</option>
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-300">
+              <label className="text-sm font-medium text-secondary-foreground">
                 Default view
               </label>
-              <select className="flex h-10 w-full max-w-xs rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <select className="flex h-10 w-full max-w-xs rounded-md border border-border bg-input-bg px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring">
                 <option value="grid">Grid</option>
                 <option value="list">List</option>
               </select>
@@ -209,36 +219,21 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-300">Theme</label>
+              <label className="text-sm font-medium text-secondary-foreground">Theme</label>
               <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="theme"
-                    value="dark"
-                    defaultChecked
-                    className="h-4 w-4 border-zinc-700 bg-zinc-900 text-blue-500 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-zinc-300">Dark</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="theme"
-                    value="light"
-                    className="h-4 w-4 border-zinc-700 bg-zinc-900 text-blue-500 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-zinc-300">Light</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="theme"
-                    value="system"
-                    className="h-4 w-4 border-zinc-700 bg-zinc-900 text-blue-500 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-zinc-300">System</span>
-                </label>
+                {(["dark", "light", "system"] as const).map((t) => (
+                  <label key={t} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value={t}
+                      checked={theme === t}
+                      onChange={() => setTheme(t)}
+                      className="h-4 w-4 border-border bg-input-bg text-primary focus:ring-ring"
+                    />
+                    <span className="text-sm text-secondary-foreground capitalize">{t}</span>
+                  </label>
+                ))}
               </div>
             </div>
           </CardContent>

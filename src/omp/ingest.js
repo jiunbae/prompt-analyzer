@@ -72,7 +72,7 @@ function normalizePayload(payload, config) {
     response_text: captureResponse ? storedResponseText : null,
     prompt_length: storedPromptText.length,
     response_length: captureResponse && storedResponseText ? storedResponseText.length : null,
-    project: payload.project || null,
+    project: payload.project || (payload.cwd ? require("path").basename(payload.cwd) : null),
     cwd: payload.cwd || null,
     model: payload.model || null,
     cli_name: payload.cli_name || payload.cli || payload.source || "unknown",
@@ -157,13 +157,31 @@ function ingestPayload(rawPayload, config) {
 
   try {
     if (record.role === "assistant" && record.session_id) {
-      const row = db
-        .prepare(
-          `SELECT id, prompt_text FROM prompts
-           WHERE session_id = ? AND role = 'user' AND response_text IS NULL
-           ORDER BY created_at DESC LIMIT 1`
-        )
-        .get(record.session_id);
+      let row = null;
+
+      // Precise match: use user_prompt_text content hash when available
+      // This correctly pairs responses with their exact user prompt
+      if (payload.user_prompt_text) {
+        const hash = hashContent(payload.user_prompt_text);
+        row = db
+          .prepare(
+            `SELECT id, prompt_text FROM prompts
+             WHERE session_id = ? AND role = 'user' AND content_hash = ?
+             LIMIT 1`
+          )
+          .get(record.session_id, hash);
+      }
+
+      // Fallback: match oldest unmatched user prompt in the session
+      if (!row) {
+        row = db
+          .prepare(
+            `SELECT id, prompt_text FROM prompts
+             WHERE session_id = ? AND role = 'user' AND response_text IS NULL
+             ORDER BY created_at ASC LIMIT 1`
+          )
+          .get(record.session_id);
+      }
 
       if (row && record.capture_response === 1 && record.prompt_text) {
         updatePromptWithResponse(

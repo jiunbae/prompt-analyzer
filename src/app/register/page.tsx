@@ -65,15 +65,15 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
-        <Card className="w-full max-w-sm bg-zinc-900 border-zinc-800">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
-            <CardTitle className="text-xl text-zinc-100">
+            <CardTitle>
               Registration Successful
             </CardTitle>
           </CardHeader>
           <CardContent className="text-center">
-            <p className="text-zinc-400 mb-4">
+            <p className="text-muted-foreground mb-4">
               Your account has been created. You can now sign in.
             </p>
             <Link href="/login">
@@ -86,17 +86,17 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
-      <Card className="w-full max-w-sm bg-zinc-900 border-zinc-800">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
             <img
               src="/logo-dark.svg"
               alt="Oh My Prompt"
-              className="h-10 w-auto"
+              className="h-10 w-auto dark:invert-0 invert"
             />
           </div>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Create your account
           </p>
         </CardHeader>
@@ -108,7 +108,6 @@ export default function RegisterPage() {
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-zinc-100"
                 autoFocus
                 required
               />
@@ -119,7 +118,6 @@ export default function RegisterPage() {
                 placeholder="Name (optional)"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-zinc-100"
               />
             </div>
             <div>
@@ -128,7 +126,6 @@ export default function RegisterPage() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-zinc-100"
                 required
               />
             </div>
@@ -138,7 +135,6 @@ export default function RegisterPage() {
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-zinc-100"
                 required
               />
             </div>
@@ -153,7 +149,7 @@ export default function RegisterPage() {
               {loading ? "..." : "Register"}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-zinc-400">
+          <div className="mt-4 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link href="/login" className="text-blue-400 hover:text-blue-300">
               Sign in

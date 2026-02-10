@@ -8,7 +8,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { MarkdownContent } from "@/components/markdown-content";
+import { SessionThread } from "@/components/session-thread";
 
 export const dynamic = "force-dynamic";
 
@@ -56,11 +56,12 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
   const client = postgres(process.env.DATABASE_URL!);
   const db = drizzle(client, { schema });
 
+  const sessionConditions = user.isAdmin
+    ? eq(schema.prompts.sessionId, sessionId)
+    : and(eq(schema.prompts.userId, user.userId), eq(schema.prompts.sessionId, sessionId));
+
   const prompts = await db.query.prompts.findMany({
-    where: and(
-      eq(schema.prompts.userId, user.userId),
-      eq(schema.prompts.sessionId, sessionId)
-    ),
+    where: sessionConditions,
     orderBy: [asc(schema.prompts.timestamp)],
     with: {
       promptTags: {
@@ -87,7 +88,7 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
       <div className="flex items-center justify-between">
         <Link
           href="/sessions"
-          className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -98,9 +99,9 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
 
       {/* Session metadata header */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-6">
           <div className="flex flex-wrap items-center gap-4 text-sm">
-            <div className="flex items-center gap-2 text-zinc-400">
+            <div className="flex items-center gap-2 text-muted-foreground">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -115,28 +116,28 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
           </div>
           <div className="flex flex-wrap gap-4 mt-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">Prompts:</span>
-              <span className="text-zinc-300">{prompts.length}</span>
+              <span className="text-muted-foreground">Prompts:</span>
+              <span className="text-secondary-foreground">{prompts.length}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">Responses:</span>
-              <span className="text-zinc-300">{prompts.filter(p => p.responseText).length}</span>
+              <span className="text-muted-foreground">Responses:</span>
+              <span className="text-secondary-foreground">{prompts.filter(p => p.responseText).length}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">Input:</span>
-              <span className="text-zinc-300">{formatTokens(totalInputTokens)} tokens</span>
+              <span className="text-muted-foreground">Input:</span>
+              <span className="text-secondary-foreground">{formatTokens(totalInputTokens)} tokens</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">Output:</span>
-              <span className="text-zinc-300">{formatTokens(totalOutputTokens)} tokens</span>
+              <span className="text-muted-foreground">Output:</span>
+              <span className="text-secondary-foreground">{formatTokens(totalOutputTokens)} tokens</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">Total:</span>
-              <span className="font-medium text-zinc-100">{formatTokens(totalInputTokens + totalOutputTokens)} tokens</span>
+              <span className="text-muted-foreground">Total:</span>
+              <span className="font-medium text-foreground">{formatTokens(totalInputTokens + totalOutputTokens)} tokens</span>
             </div>
           </div>
           {first.workingDirectory && (
-            <div className="mt-2 text-xs text-zinc-500 font-mono truncate" title={first.workingDirectory}>
+            <div className="mt-2 text-xs text-muted-foreground font-mono truncate" title={first.workingDirectory}>
               {first.workingDirectory}
             </div>
           )}
@@ -144,67 +145,20 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
       </Card>
 
       {/* Conversation thread */}
-      <div className="space-y-4">
-        {prompts.map((prompt) => (
-          <div key={prompt.id} className="space-y-0">
-            {/* User message */}
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="font-medium text-blue-400">You</span>
-                  <span className="text-xs text-zinc-500">{formatDate(prompt.timestamp)}</span>
-                  {prompt.tokenEstimate && (
-                    <span className="text-xs text-zinc-500">
-                      {formatTokens(prompt.tokenEstimate)} tokens
-                    </span>
-                  )}
-                  <Link
-                    href={`/prompts/${prompt.id}`}
-                    className="ml-auto text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    View detail
-                  </Link>
-                </div>
-                <div className="prose prose-invert max-w-none">
-                  <MarkdownContent content={prompt.promptText} />
-                </div>
-                {prompt.promptTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {prompt.promptTags.map((pt) => (
-                      <Badge
-                        key={pt.tag.id}
-                        variant="secondary"
-                        style={pt.tag.color ? { backgroundColor: `${pt.tag.color}22`, color: pt.tag.color, borderColor: pt.tag.color } : undefined}
-                      >
-                        {pt.tag.name}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Assistant response */}
-            {prompt.responseText && (
-              <Card className="border-l-2 border-l-green-800 ml-4">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="font-medium text-green-400">Assistant</span>
-                    {prompt.tokenEstimateResponse && (
-                      <span className="text-xs text-zinc-500">
-                        {formatTokens(prompt.tokenEstimateResponse)} tokens
-                      </span>
-                    )}
-                  </div>
-                  <div className="prose prose-invert max-w-none">
-                    <MarkdownContent content={prompt.responseText} />
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        ))}
-      </div>
+      <SessionThread
+        prompts={prompts.map((p) => ({
+          id: p.id,
+          timestamp: p.timestamp.toISOString(),
+          promptText: p.promptText,
+          responseText: p.responseText,
+          tokenEstimate: p.tokenEstimate,
+          tokenEstimateResponse: p.tokenEstimateResponse,
+          promptTags: p.promptTags.map((pt) => ({
+            tag: { id: pt.tag.id, name: pt.tag.name, color: pt.tag.color },
+          })),
+        }))}
+        responseCount={prompts.filter((p) => p.responseText).length}
+      />
     </div>
   );
 }

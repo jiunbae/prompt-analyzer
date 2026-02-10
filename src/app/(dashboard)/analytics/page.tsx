@@ -45,84 +45,155 @@ export default async function AnalyticsPage() {
   if (!data) {
     return (
       <div className="p-6">
-        <p className="text-zinc-400">Unable to load analytics. Check database connection.</p>
+        <p className="text-muted-foreground">Unable to load analytics. Check database connection.</p>
       </div>
     );
   }
 
-  const { stats, dailyStats, projectStats, typeStats, recentPrompts, projectActivity, sessions } =
+  const { stats, responseStats, dailyStats, projectStats, typeStats, recentPrompts, projectActivity, sessions } =
     data;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-100">Insights</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-semibold text-foreground">Insights</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           See how you prompt and where to improve
         </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
-              Total Prompts
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-zinc-100">
-              {formatNumber(Number(stats?.totalPrompts ?? 0))}
-            </div>
-          </CardContent>
-        </Card>
+      {/* User Prompt Stats */}
+      <div>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-blue-400" />
+          User Prompts
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Prompts
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {formatNumber(Number(stats?.totalPrompts ?? 0))}
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
-              Est. Tokens
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-zinc-100">
-              {formatNumber(Number(stats?.totalTokens ?? 0))}
-            </div>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Input Tokens
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {formatNumber(Number(stats?.totalTokens ?? 0))}
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
-              Projects
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-zinc-100">
-              {Number(stats?.uniqueProjects ?? 0)}
-            </div>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Projects
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {Number(stats?.uniqueProjects ?? 0)}
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
-              Avg Length
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-zinc-100">
-              {formatNumber(Math.round(Number(stats?.avgPromptLength ?? 0)))}
-            </div>
-            <p className="text-xs text-zinc-500">characters</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Avg Length
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {formatNumber(Math.round(Number(stats?.avgPromptLength ?? 0)))}
+              </div>
+              <p className="text-xs text-muted-foreground">characters</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Agent Response Stats */}
+      <div>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
+          Agent Responses
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Responses
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {formatNumber(responseStats.totalResponses)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {responseStats.responseRate}% response rate
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Output Tokens
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {formatNumber(responseStats.totalResponseTokens)}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Characters
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {formatNumber(responseStats.totalResponseChars)}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Avg Response
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {formatNumber(responseStats.avgResponseLength)}
+              </div>
+              <p className="text-xs text-muted-foreground">characters</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Daily Activity Chart */}
       <div className="grid md:grid-cols-2 gap-6">
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-zinc-100">
+            <CardTitle>
               Activity Heatmap
             </CardTitle>
           </CardHeader>
@@ -136,18 +207,20 @@ export default async function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-zinc-100">
+            <CardTitle>
               Token Usage
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <TokenUsageChart 
-              data={dailyStats.map(d => ({ 
-                date: d.date, 
-                tokens: Number(d.tokens ?? 0) 
-              }))} 
+            <TokenUsageChart
+              data={dailyStats.map(d => ({
+                date: d.date,
+                tokens: Number(d.tokens ?? 0),
+                inputTokens: Number(d.inputTokens ?? 0),
+                outputTokens: Number(d.outputTokens ?? 0),
+              }))}
             />
           </CardContent>
         </Card>
@@ -155,13 +228,13 @@ export default async function AnalyticsPage() {
 
       {/* Projects / Sessions */}
       <div className="grid lg:grid-cols-2 gap-6">
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-zinc-100">Project Activity</CardTitle>
+            <CardTitle>Project Activity</CardTitle>
           </CardHeader>
           <CardContent>
             {projectActivity.length === 0 ? (
-              <div className="py-8 text-center text-zinc-500 text-sm">
+              <div className="py-8 text-center text-muted-foreground text-sm">
                 No project activity in the last 30 days.
               </div>
             ) : (
@@ -175,33 +248,33 @@ export default async function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-zinc-100">Sessions</CardTitle>
+            <CardTitle>Sessions</CardTitle>
           </CardHeader>
           <CardContent>
             {sessions.summary.sessions === 0 ? (
-              <div className="py-8 text-center text-zinc-500 text-sm">
+              <div className="py-8 text-center text-muted-foreground text-sm">
                 Not enough activity to analyze sessions.
               </div>
             ) : (
               <div>
                 <div className="grid grid-cols-3 gap-3 text-sm">
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2">
-                    <div className="text-xs text-zinc-500">Sessions (30d)</div>
-                    <div className="text-zinc-100 font-medium">
+                  <div className="rounded-lg border border-border bg-background/50 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Sessions (30d)</div>
+                    <div className="text-foreground font-medium">
                       {sessions.summary.sessions}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2">
-                    <div className="text-xs text-zinc-500">Avg prompts</div>
-                    <div className="text-zinc-100 font-medium">
+                  <div className="rounded-lg border border-border bg-background/50 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Avg prompts</div>
+                    <div className="text-foreground font-medium">
                       {sessions.summary.avgPromptsPerSession}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2">
-                    <div className="text-xs text-zinc-500">Avg minutes</div>
-                    <div className="text-zinc-100 font-medium">
+                  <div className="rounded-lg border border-border bg-background/50 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Avg minutes</div>
+                    <div className="text-foreground font-medium">
                       {sessions.summary.avgSessionMinutes}
                     </div>
                   </div>
@@ -215,22 +288,22 @@ export default async function AnalyticsPage() {
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Top Projects */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-zinc-100">Top Projects</CardTitle>
+            <CardTitle>Top Projects</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {projectStats.map((project, i) => (
                 <div key={project.project || i} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-zinc-500 text-sm w-4">{i + 1}.</span>
-                    <span className="text-zinc-200 font-medium">
+                    <span className="text-muted-foreground text-sm w-4">{i + 1}.</span>
+                    <span className="text-foreground font-medium">
                       {project.project}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-zinc-400 text-sm">
+                    <span className="text-muted-foreground text-sm">
                       {formatNumber(Number(project.tokens))} tokens
                     </span>
                     <Badge variant="secondary">{project.count}</Badge>
@@ -238,16 +311,16 @@ export default async function AnalyticsPage() {
                 </div>
               ))}
               {projectStats.length === 0 && (
-                <p className="text-zinc-500 text-center py-4">No project data</p>
+                <p className="text-muted-foreground text-center py-4">No project data</p>
               )}
             </div>
           </CardContent>
         </Card>
 
         {/* Prompt Types */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-zinc-100">Prompt Types</CardTitle>
+            <CardTitle>Prompt Types</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -266,12 +339,12 @@ export default async function AnalyticsPage() {
                 return (
                   <div key={type.type || i} className="space-y-1">
                     <div className="flex justify-between text-sm">
-                      <span className="text-zinc-300">{label}</span>
-                      <span className="text-zinc-400">
+                      <span className="text-secondary-foreground">{label}</span>
+                      <span className="text-muted-foreground">
                         {type.count} ({percentage.toFixed(1)}%)
                       </span>
                     </div>
-                    <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
                       <div
                         className="h-full bg-indigo-500 rounded-full"
                         style={{ width: `${percentage}%` }}
@@ -286,39 +359,46 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Recent Activity */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-lg text-zinc-100">Recent Activity</CardTitle>
+          <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {recentPrompts.map((prompt) => (
               <div
                 key={prompt.id}
-                className="flex items-center justify-between py-2 border-b border-zinc-800 last:border-0"
+                className="flex items-center justify-between py-2 border-b border-border last:border-0"
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-2 w-2 rounded-full bg-green-500" />
+                  <div className={`h-2 w-2 rounded-full ${prompt.hasResponse ? "bg-green-500" : "bg-muted-foreground/40"}`} />
                   <div>
-                    <p className="text-zinc-200 text-sm">
+                    <p className="text-foreground text-sm">
                       {prompt.projectName ?? "No project"}
                     </p>
-                    <p className="text-zinc-500 text-xs">
+                    <p className="text-muted-foreground text-xs">
                       {formatDate(prompt.timestamp)}
                     </p>
                   </div>
                 </div>
-                <Badge
-                  variant={
-                    prompt.promptType === "user_input"
-                      ? "default"
-                      : prompt.promptType === "task_notification"
-                      ? "secondary"
-                      : "outline"
-                  }
-                >
-                  {prompt.promptLength} chars
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {prompt.hasResponse && (
+                    <Badge variant="outline" className="text-green-500 border-green-800 text-[10px]">
+                      responded
+                    </Badge>
+                  )}
+                  <Badge
+                    variant={
+                      prompt.promptType === "user_input"
+                        ? "default"
+                        : prompt.promptType === "task_notification"
+                        ? "secondary"
+                        : "outline"
+                    }
+                  >
+                    {prompt.promptLength} chars
+                  </Badge>
+                </div>
               </div>
             ))}
           </div>

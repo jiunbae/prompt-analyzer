@@ -58,11 +58,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-      setUser(null);
-      window.location.href = "/login";
-    } catch (err) {
-      console.error("Logout failed:", err);
+    } catch {
+      // Proceed with logout even if the API call fails
     }
+    setUser(null);
+    window.location.href = "/login";
   }, []);
 
   useEffect(() => {

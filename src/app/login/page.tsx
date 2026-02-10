@@ -41,17 +41,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
-      <Card className="w-full max-w-sm bg-zinc-900 border-zinc-800">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
             <img
               src="/logo-dark.svg"
               alt="Oh My Prompt"
-              className="h-10 w-auto"
+              className="h-10 w-auto dark:invert-0 invert"
             />
           </div>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Sign in to your prompt journal
           </p>
         </CardHeader>
@@ -63,7 +63,6 @@ export default function LoginPage() {
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-zinc-100"
                 autoFocus
               />
             </div>
@@ -73,7 +72,6 @@ export default function LoginPage() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-zinc-100"
               />
             </div>
             {error && (
@@ -87,14 +85,14 @@ export default function LoginPage() {
               {loading ? "..." : "Sign In"}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-zinc-400">
+          <div className="mt-4 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
             <Link href="/register" className="text-blue-400 hover:text-blue-300">
               Register
             </Link>
           </div>
-          <div className="mt-6 pt-4 border-t border-zinc-800 text-center">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-widest">
+          <div className="mt-6 pt-4 border-t border-border text-center">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
               Build: v0.1.2-debug
             </p>
           </div>

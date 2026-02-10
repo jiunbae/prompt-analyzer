@@ -119,7 +119,7 @@ export default function AllowlistPage() {
   if (userLoading || !user?.isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full" />
+        <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -127,8 +127,8 @@ export default function AllowlistPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-100">Email Allowlist</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-semibold text-foreground">Email Allowlist</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Manage which email addresses can register for an account
         </p>
       </div>
@@ -170,22 +170,22 @@ export default function AllowlistPage() {
         <CardContent>
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full" />
+              <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
             </div>
           ) : emails.length === 0 ? (
-            <p className="text-zinc-400 text-center py-8">
+            <p className="text-muted-foreground text-center py-8">
               No emails in the allowlist yet. Add one above to get started.
             </p>
           ) : (
-            <div className="divide-y divide-zinc-800">
+            <div className="divide-y divide-border">
               {emails.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center justify-between py-3"
                 >
                   <div>
-                    <p className="text-zinc-100 font-medium">{item.email}</p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-foreground font-medium">{item.email}</p>
+                    <p className="text-xs text-muted-foreground">
                       Added {new Date(item.addedAt).toLocaleDateString()}
                       {item.addedBy && ` by ${item.addedBy.name || item.addedBy.email}`}
                     </p>

@@ -7,13 +7,14 @@ function fetchRows(db, since, lastId) {
   const params = [];
   let whereClause = "";
   if (since) {
+    const iso = new Date(since).toISOString();
     if (lastId) {
-      whereClause = "WHERE created_at > ? OR (created_at = ? AND id > ?)";
-      const iso = new Date(since).toISOString();
-      params.push(iso, iso, lastId);
+      // Pick up new records OR records updated after they were synced (e.g., response added later)
+      whereClause = "WHERE created_at > ? OR (created_at = ? AND id > ?) OR (updated_at > ? AND updated_at > created_at)";
+      params.push(iso, iso, lastId, iso);
     } else {
-      whereClause = "WHERE created_at > ?";
-      params.push(new Date(since).toISOString());
+      whereClause = "WHERE created_at > ? OR (updated_at > ? AND updated_at > created_at)";
+      params.push(iso, iso);
     }
   }
   return db
@@ -26,22 +27,22 @@ function rowToUploadRecord(row) {
     event_id: row.event_id || row.id.toString(),
     created_at: row.created_at,
     prompt_text: row.prompt_text,
-    response_text: row.response_text || null,
-    prompt_length: row.prompt_length || (row.prompt_text ? row.prompt_text.length : 0),
-    response_length: row.response_length || null,
-    project: row.project || null,
-    cwd: row.cwd || null,
+    response_text: row.response_text ?? null,
+    prompt_length: row.prompt_length ?? (row.prompt_text ? row.prompt_text.length : 0),
+    response_length: row.response_length ?? null,
+    project: row.project || (row.cwd ? require("path").basename(row.cwd) : null),
+    cwd: row.cwd ?? null,
     source: row.source || "omp-cli",
-    session_id: row.session_id || null,
+    session_id: row.session_id ?? null,
     role: row.role || "user",
-    model: row.model || null,
-    cli_name: row.cli_name || null,
-    cli_version: row.cli_version || null,
-    token_estimate: row.token_estimate || null,
-    token_estimate_response: row.token_estimate_response || null,
-    word_count: row.word_count || null,
-    word_count_response: row.word_count_response || null,
-    content_hash: row.content_hash || null,
+    model: row.model ?? null,
+    cli_name: row.cli_name ?? null,
+    cli_version: row.cli_version ?? null,
+    token_estimate: row.token_estimate ?? null,
+    token_estimate_response: row.token_estimate_response ?? null,
+    word_count: row.word_count ?? null,
+    word_count_response: row.word_count_response ?? null,
+    content_hash: row.content_hash ?? null,
   };
 }
 
@@ -144,7 +145,7 @@ async function syncToServer(config, options = {}) {
         throw new Error("Request too large. Try reducing chunk size.");
       }
 
-      if (response.status >= 500) {
+      if (response.status >= 400) {
         throw new Error(`Server error (${response.status}): ${JSON.stringify(response.body)}`);
       }
 
@@ -158,8 +159,9 @@ async function syncToServer(config, options = {}) {
       chunks++;
     }
 
+    // Only advance sync state if the server actually accepted records
     const lastRow = rows[rows.length - 1];
-    if (!options.dryRun && lastRow?.created_at) {
+    if (!options.dryRun && lastRow?.created_at && (totalAccepted > 0 || totalDuplicates > 0)) {
       updateSyncState(config, lastRow.created_at, lastRow.id);
     }
 
