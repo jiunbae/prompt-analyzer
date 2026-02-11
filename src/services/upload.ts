@@ -45,9 +45,14 @@ export async function processUpload(
     const redactMask = process.env.OMP_UPLOAD_REDACT_MASK || "[REDACTED]";
 
     for (const record of records) {
-      if (!record.event_id || !record.created_at || !record.prompt_text) {
+      if (!record.event_id || !record.created_at) {
         rejected++;
-        errors.push(`Invalid record: missing required fields (event_id, created_at, prompt_text)`);
+        errors.push(`Invalid record: missing required fields (event_id, created_at)`);
+        continue;
+      }
+
+      if (!record.prompt_text || !record.prompt_text.trim()) {
+        duplicates++; // Skip silently, count as duplicate to advance sync state
         continue;
       }
 

@@ -137,6 +137,7 @@ async function syncToServer(config, options = {}) {
       const chunk = rows.slice(i, i + chunkSize);
       let records = chunk.map(rowToUploadRecord);
       records = records.map((r) => postprocessUploadRecord(r, config));
+      records = records.filter((r) => r.prompt_text && r.prompt_text.trim().length > 0);
 
       if (options.dryRun) {
         totalAccepted += chunk.length;

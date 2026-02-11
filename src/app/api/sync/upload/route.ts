@@ -11,7 +11,7 @@ const MAX_RECORDS_PER_REQUEST = 1000;
 const uploadRecordSchema = z.object({
   event_id: z.string().min(1),
   created_at: z.string().min(1),
-  prompt_text: z.string().min(1),
+  prompt_text: z.string(),
   response_text: z.string().nullish(),
   prompt_length: z.number(),
   response_length: z.number().nullish(),
