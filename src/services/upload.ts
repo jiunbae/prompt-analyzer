@@ -3,6 +3,7 @@ import { env } from "@/env";
 import { updateDailyAnalytics } from "./sync";
 import type { UploadRecord, UploadResult } from "./upload-types";
 import { postprocessUploadRecordForDb } from "./upload-postprocess";
+import { computeHeuristicScore } from "@/extensions/prompt-quality/processor";
 
 export type { UploadRecord, UploadResult } from "./upload-types";
 
@@ -97,6 +98,14 @@ export async function processUpload(
           continue;
         }
 
+        // Compute heuristic quality score for user_input prompts (fast, no LLM)
+        const isUserInput = promptType === "user_input";
+        const heuristic = isUserInput
+          ? computeHeuristicScore(processed.promptText, {
+              hasContext: !!(record.project || record.cwd),
+            })
+          : null;
+
         // Insert new record
         await db
           .insert(schema.prompts)
@@ -119,6 +128,13 @@ export async function processUpload(
             tokenEstimateResponse: processed.tokenEstimateResponse,
             wordCountResponse: processed.wordCountResponse,
             searchVector: sql`to_tsvector('english', ${processed.promptText} || ' ' || ${processed.responseText ?? ""})`,
+            // Inline heuristic enrichment for user_input prompts
+            ...(heuristic
+              ? {
+                  qualityScore: heuristic.qualityScore,
+                  topicTags: heuristic.topicTags,
+                }
+              : {}),
           });
 
         affectedDates.add(dateStr);

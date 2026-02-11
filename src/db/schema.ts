@@ -87,6 +87,11 @@ export const prompts = pgTable(
     syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 
+    // Enrichment fields (Phase 3)
+    qualityScore: integer("quality_score"),
+    topicTags: text("topic_tags").array(),
+    enrichedAt: timestamp("enriched_at", { withTimezone: true }),
+
     searchVector: tsvector("search_vector"),
   },
   (table) => [
