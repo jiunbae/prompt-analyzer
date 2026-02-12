@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     await cacheInsight(userId, type, result, {
       dataHash: hashData(processorInput),
-      ttlHours: ext.name.includes("weekly") ? 168 : 24,
+      ttlHours: ext.cacheTtlHours ?? 24,
     });
 
     return NextResponse.json({ insight: result });

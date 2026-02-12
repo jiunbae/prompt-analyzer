@@ -59,6 +59,8 @@ export interface Extension {
   name: string;
   version: string;
   description: string;
+  /** Cache TTL in hours for generated insights (default: 24) */
+  cacheTtlHours?: number;
   /** Batch / scheduled processing */
   processor?: ExtensionProcessor;
   /** tRPC router for API access */

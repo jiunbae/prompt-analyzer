@@ -121,8 +121,9 @@ function parseLLMResponse(
   raw: string,
   promptIds: string[],
 ): LLMScoreResult[] {
-  // Strip markdown code fences if present
-  const cleaned = raw.replace(/```(?:json)?\s*/g, "").replace(/```\s*/g, "").trim();
+  // Extract content from markdown code fences if present
+  const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const cleaned = (jsonMatch ? jsonMatch[1] : raw).trim();
 
   let parsed: { scores: LLMScoreResult[] };
   try {
@@ -237,7 +238,12 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
                 topicTags: score.topic_tags,
                 enrichedAt: new Date(),
               })
-              .where(eq(schema.prompts.id, score.id));
+              .where(
+                and(
+                  eq(schema.prompts.id, score.id),
+                  eq(schema.prompts.userId, input.userId),
+                ),
+              );
 
             totalScored++;
             totalQuality += score.quality_score;
@@ -260,7 +266,12 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
                   topicTags: heuristic.topicTags,
                   enrichedAt: new Date(),
                 })
-                .where(eq(schema.prompts.id, prompt.id));
+                .where(
+                  and(
+                    eq(schema.prompts.id, prompt.id),
+                    eq(schema.prompts.userId, input.userId),
+                  ),
+                );
 
               totalScored++;
               totalQuality += heuristic.qualityScore;
@@ -283,7 +294,12 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
                 topicTags: heuristic.topicTags,
                 enrichedAt: new Date(),
               })
-              .where(eq(schema.prompts.id, prompt.id));
+              .where(
+                and(
+                  eq(schema.prompts.id, prompt.id),
+                  eq(schema.prompts.userId, input.userId),
+                ),
+              );
 
             totalScored++;
             totalQuality += heuristic.qualityScore;
@@ -305,7 +321,12 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
               topicTags: heuristic.topicTags,
               enrichedAt: new Date(),
             })
-            .where(eq(schema.prompts.id, prompt.id));
+            .where(
+              and(
+                eq(schema.prompts.id, prompt.id),
+                eq(schema.prompts.userId, input.userId),
+              ),
+            );
 
           totalScored++;
           totalQuality += heuristic.qualityScore;
