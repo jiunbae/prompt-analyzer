@@ -1,33 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: prompt-analyzer
-  namespace: prompt-analyzer
+  name: oh-my-prompt
+  namespace: oh-my-prompt
   labels:
-    app: prompt-analyzer
+    app: oh-my-prompt
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: prompt-analyzer
+      app: oh-my-prompt
   template:
     metadata:
       labels:
-        app: prompt-analyzer
+        app: oh-my-prompt
     spec:
       imagePullSecrets:
         - name: registry-creds
       containers:
-        - name: prompt-analyzer
-          image: registry.jiun.dev/prompt-analyzer:latest
+        - name: oh-my-prompt
+          image: registry.jiun.dev/oh-my-prompt:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
           envFrom:
             - configMapRef:
-                name: prompt-analyzer-config
+                name: oh-my-prompt-config
             - secretRef:
-                name: prompt-analyzer-secrets
+                name: oh-my-prompt-secrets
           resources:
             requests:
               memory: "256Mi"

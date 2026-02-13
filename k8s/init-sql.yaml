@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: init-sql
-  namespace: prompt-analyzer
+  namespace: oh-my-prompt
 data:
   init.sql: |
     -- NOTE: This is a reference schema only.

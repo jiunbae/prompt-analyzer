@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  namespace: prompt-analyzer
+  namespace: oh-my-prompt
   labels:
     app: redis
 spec:

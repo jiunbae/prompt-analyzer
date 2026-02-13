@@ -7,9 +7,9 @@ on:
 
 env:
   REGISTRY: registry.jiun.dev
-  IMAGE_NAME: prompt-analyzer
+  IMAGE_NAME: oh-my-prompt
   IAC_REPO: jiunbae/IaC
-  APP_PATH: kubernetes/apps/prompt-analyzer
+  APP_PATH: kubernetes/apps/oh-my-prompt
 
 jobs:
   build:
@@ -57,5 +57,5 @@ jobs:
           git config user.name "CI Bot"
           git config user.email "ci@jiun.dev"
           git add ${{ env.APP_PATH }}/kustomization.yaml
-          git diff --staged --quiet || git commit -m "chore(prompt-analyzer): update image to ${{ gitea.sha }}"
+          git diff --staged --quiet || git commit -m "chore(oh-my-prompt): update image to ${{ gitea.sha }}"
           git push

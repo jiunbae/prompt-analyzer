@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: prompt-analyzer-ingress
-  namespace: prompt-analyzer
+  name: oh-my-prompt-ingress
+  namespace: oh-my-prompt
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
@@ -10,7 +10,7 @@ spec:
   tls:
     - hosts:
         - prompt.jiun.dev
-      secretName: prompt-analyzer-tls
+      secretName: oh-my-prompt-tls
   rules:
     - host: prompt.jiun.dev
       http:
@@ -19,6 +19,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: prompt-analyzer-service
+                name: oh-my-prompt-service
                 port:
                   number: 80

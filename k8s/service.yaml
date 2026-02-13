@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: prompt-analyzer-service
-  namespace: prompt-analyzer
+  name: oh-my-prompt-service
+  namespace: oh-my-prompt
 spec:
   selector:
-    app: prompt-analyzer
+    app: oh-my-prompt
   ports:
     - protocol: TCP
       port: 80
@@ -16,7 +16,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prompt-db-service
-  namespace: prompt-analyzer
+  namespace: oh-my-prompt
 spec:
   selector:
     app: prompt-db
@@ -30,7 +30,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  namespace: prompt-analyzer
+  namespace: oh-my-prompt
 spec:
   selector:
     app: redis

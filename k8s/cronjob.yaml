@@ -1,8 +1,8 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: prompt-analyzer-sync
-  namespace: prompt-analyzer
+  name: oh-my-prompt-sync
+  namespace: oh-my-prompt
 spec:
   schedule: "*/10 * * * *"
   concurrencyPolicy: Forbid
@@ -20,14 +20,14 @@ spec:
             - name: SYNC_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: prompt-analyzer-secrets
+                  name: oh-my-prompt-secrets
                   key: SYNC_TOKEN
             command:
             - /bin/sh
             - -c
             - |
               curl -X POST \
-                "http://prompt-analyzer-service.prompt-analyzer.svc.cluster.local/api/sync" \
+                "http://oh-my-prompt-service.oh-my-prompt.svc.cluster.local/api/sync" \
                 -H "Content-Type: application/json" \
                 -H "X-User-Token: ${SYNC_TOKEN}" \
                 -d '{"type":"full","syncType":"cron"}' \
