@@ -10,7 +10,7 @@ const COMPOSE_FILE = path.join(SERVE_DIR, "docker-compose.yaml");
 const SECRET_FILE = path.join(SERVE_DIR, ".session-secret");
 
 function getServeConfig(config) {
-  const image = config.serve?.image || "registry.jiun.dev/oh-my-prompt:latest";
+  const image = config.serve?.image || "ghcr.io/jiunbae/oh-my-prompt:latest";
   const port = config.serve?.port || 3000;
   const adminEmail = config.serve?.adminEmail || config.user?.email || "";
   return { image, port, adminEmail };

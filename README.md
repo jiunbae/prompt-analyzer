@@ -349,7 +349,7 @@ docker run -p 3000:3000 \
   -e DATABASE_URL=postgresql://user:pass@host:5432/prompts \
   -e SESSION_SECRET=$(openssl rand -hex 32) \
   -e OMP_ADMIN_EMAIL=you@email.com \
-  registry.jiun.dev/oh-my-prompt:latest
+  ghcr.io/jiunbae/oh-my-prompt:latest
 ```
 
 ### Environment Variables
