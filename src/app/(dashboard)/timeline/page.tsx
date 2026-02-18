@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SessionCalendar } from "@/components/session-calendar";
@@ -42,7 +42,7 @@ interface TimelineData {
 
 const PAGE_SIZE = 500;
 
-export default function TimelinePage() {
+function TimelinePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -424,6 +424,14 @@ export default function TimelinePage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function TimelinePage() {
+  return (
+    <Suspense fallback={<div className="space-y-6"><div className="h-8 w-48 bg-muted animate-pulse rounded" /><div className="h-64 bg-muted animate-pulse rounded-lg" /></div>}>
+      <TimelinePageContent />
+    </Suspense>
   );
 }
 

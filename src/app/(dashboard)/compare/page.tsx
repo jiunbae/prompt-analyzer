@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DiffViewer, type DiffPrompt, type DiffSegment } from "@/components/diff-viewer";
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,7 @@ function buildPromptListInput(search: string): string {
   return encodeURIComponent(JSON.stringify(input));
 }
 
-export default function ComparePage() {
+function ComparePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isRouting, startTransition] = useTransition();
@@ -375,5 +375,13 @@ export default function ComparePage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ComparePage() {
+  return (
+    <Suspense fallback={<div className="space-y-6"><div className="h-8 w-48 bg-muted animate-pulse rounded" /><div className="h-32 bg-muted animate-pulse rounded-lg" /></div>}>
+      <ComparePageContent />
+    </Suspense>
   );
 }
