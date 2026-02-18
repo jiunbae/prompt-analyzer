@@ -128,6 +128,10 @@ export async function GET() {
   }
 }
 
+const deleteShareSchema = z.object({
+  id: z.string().uuid("id must be a valid UUID"),
+});
+
 // DELETE /api/share - Revoke a share link (id in body or query)
 export async function DELETE(request: NextRequest) {
   const { db, client } = getDb();
@@ -138,13 +142,16 @@ export async function DELETE(request: NextRequest) {
     }
 
     const url = new URL(request.url);
-    const id = url.searchParams.get("id");
-
-    if (!id) {
-      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    const parsed = deleteShareSchema.safeParse({ id: url.searchParams.get("id") });
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid id parameter", details: parsed.error.flatten() },
+        { status: 400 }
+      );
     }
+    const { id } = parsed.data;
 
-    await db
+    const rows = await db
       .update(schema.sharedPrompts)
       .set({ isActive: false })
       .where(
@@ -152,7 +159,12 @@ export async function DELETE(request: NextRequest) {
           eq(schema.sharedPrompts.id, id),
           eq(schema.sharedPrompts.userId, session.userId)
         )
-      );
+      )
+      .returning({ id: schema.sharedPrompts.id });
+
+    if (rows.length === 0) {
+      return NextResponse.json({ error: "Share not found" }, { status: 404 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
