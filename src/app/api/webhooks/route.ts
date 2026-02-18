@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const { name, url, secret, events } = parseResult.data;
 
     // SSRF prevention: validate webhook URL
-    const urlCheck = validateWebhookUrl(url);
+    const urlCheck = await validateWebhookUrl(url);
     if (!urlCheck.valid) {
       return NextResponse.json(
         { error: `Invalid webhook URL: ${urlCheck.error}` },

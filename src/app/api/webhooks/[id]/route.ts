@@ -69,7 +69,7 @@ export async function PUT(
 
     // SSRF prevention: validate webhook URL if being updated
     if (updates.url !== undefined) {
-      const urlCheck = validateWebhookUrl(updates.url);
+      const urlCheck = await validateWebhookUrl(updates.url);
       if (!urlCheck.valid) {
         return NextResponse.json(
           { error: `Invalid webhook URL: ${urlCheck.error}` },
