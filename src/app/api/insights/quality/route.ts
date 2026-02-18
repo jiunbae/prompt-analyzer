@@ -47,6 +47,11 @@ export async function GET() {
       db
         .select({
           averageScore: sql<number>`coalesce(avg(quality_score), 0)`,
+          averageClarity: sql<number>`coalesce(avg(quality_clarity), 0)`,
+          averageSpecificity: sql<number>`coalesce(avg(quality_specificity), 0)`,
+          averageContext: sql<number>`coalesce(avg(quality_context), 0)`,
+          averageConstraints: sql<number>`coalesce(avg(quality_constraints), 0)`,
+          averageStructure: sql<number>`coalesce(avg(quality_structure), 0)`,
           totalEnriched: sql<number>`count(*) filter (where enriched_at is not null)`,
           totalUnenriched: sql<number>`count(*) filter (where enriched_at is null and prompt_type = 'user_input')`,
         })
@@ -95,6 +100,33 @@ export async function GET() {
     ]);
 
     const stats = overallStats[0];
+    const dimensions = {
+      clarity: Math.round(Number(stats?.averageClarity ?? 0)),
+      specificity: Math.round(Number(stats?.averageSpecificity ?? 0)),
+      context: Math.round(Number(stats?.averageContext ?? 0)),
+      constraints: Math.round(Number(stats?.averageConstraints ?? 0)),
+      structure: Math.round(Number(stats?.averageStructure ?? 0)),
+    };
+
+    const improvementTips: Record<keyof typeof dimensions, string> = {
+      clarity: "State the exact goal and desired outcome in one sentence.",
+      specificity: "Add concrete references like files, functions, and numeric targets.",
+      context: "Include current behavior and why the request matters.",
+      constraints: "List boundaries explicitly (must, should not, avoid, limits).",
+      structure: "Use bullets or sections to separate goals and requirements.",
+    };
+
+    const topImprovements = (Object.entries(dimensions) as Array<
+      [keyof typeof dimensions, number]
+    >)
+      .sort(([, a], [, b]) => a - b)
+      .filter(([, score]) => score < 75)
+      .slice(0, 3)
+      .map(([dimension, score]) => ({
+        dimension,
+        score,
+        suggestion: improvementTips[dimension],
+      }));
 
     // Build distribution map
     const distMap: Record<string, number> = { low: 0, medium: 0, good: 0, excellent: 0 };
@@ -113,6 +145,8 @@ export async function GET() {
       totalEnriched: Number(stats?.totalEnriched ?? 0),
       totalUnenriched: Number(stats?.totalUnenriched ?? 0),
       distribution: distMap,
+      dimensions,
+      topImprovements,
       topTopics,
     });
   } catch (error) {
