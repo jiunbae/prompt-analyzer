@@ -78,6 +78,7 @@ export default function WebhooksSettingsPage() {
   const [editName, setEditName] = useState("");
   const [editUrl, setEditUrl] = useState("");
   const [editSecret, setEditSecret] = useState("");
+  const [editClearSecret, setEditClearSecret] = useState(false);
   const [editEvents, setEditEvents] = useState<string[]>([]);
   const [updating, setUpdating] = useState(false);
 
@@ -147,15 +148,24 @@ export default function WebhooksSettingsPage() {
   const handleUpdate = async (id: string) => {
     setUpdating(true);
     try {
+      const payload: Record<string, unknown> = {
+        name: editName,
+        url: editUrl,
+        events: editEvents,
+      };
+
+      // Only include secret if user typed a new one; use clearSecret to explicitly remove
+      if (editClearSecret) {
+        payload.clearSecret = true;
+      } else if (editSecret) {
+        payload.secret = editSecret;
+      }
+      // If editSecret is empty and editClearSecret is false, omit secret entirely to preserve existing
+
       const res = await fetch(`/api/webhooks/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editName,
-          url: editUrl,
-          secret: editSecret || null,
-          events: editEvents,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -241,6 +251,7 @@ export default function WebhooksSettingsPage() {
     setEditName(webhook.name);
     setEditUrl(webhook.url);
     setEditSecret("");
+    setEditClearSecret(false);
     setEditEvents(webhook.events);
   };
 
@@ -431,7 +442,22 @@ export default function WebhooksSettingsPage() {
                         value={editSecret}
                         onChange={(e) => setEditSecret(e.target.value)}
                         placeholder="Leave empty to keep current secret"
+                        disabled={editClearSecret}
                       />
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editClearSecret}
+                          onChange={(e) => {
+                            setEditClearSecret(e.target.checked);
+                            if (e.target.checked) setEditSecret("");
+                          }}
+                          className="h-4 w-4 rounded border-border bg-input-bg text-primary focus:ring-ring"
+                        />
+                        <span className="text-sm text-muted-foreground">
+                          Clear secret (disable HMAC signing)
+                        </span>
+                      </label>
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-secondary-foreground">

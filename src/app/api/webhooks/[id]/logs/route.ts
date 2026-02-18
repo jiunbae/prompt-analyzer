@@ -28,7 +28,8 @@ export async function GET(
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 100);
+    const rawLimit = parseInt(searchParams.get("limit") ?? "20", 10);
+    const limit = Number.isNaN(rawLimit) ? 20 : Math.max(1, Math.min(rawLimit, 100));
 
     const client = postgres(process.env.DATABASE_URL!);
     const db = drizzle(client, { schema });

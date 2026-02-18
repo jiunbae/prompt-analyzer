@@ -23,3 +23,4 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
   duration INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_webhook_created ON webhook_logs (webhook_id, created_at DESC);

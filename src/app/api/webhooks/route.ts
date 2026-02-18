@@ -6,6 +6,7 @@ import postgres from "postgres";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { validateWebhookUrl } from "@/services/webhook";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +91,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid session" }, { status: 401 });
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Malformed JSON in request body" },
+        { status: 400 }
+      );
+    }
+
     const parseResult = createWebhookSchema.safeParse(body);
     if (!parseResult.success) {
       return NextResponse.json(
@@ -100,6 +110,15 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, url, secret, events } = parseResult.data;
+
+    // SSRF prevention: validate webhook URL
+    const urlCheck = validateWebhookUrl(url);
+    if (!urlCheck.valid) {
+      return NextResponse.json(
+        { error: `Invalid webhook URL: ${urlCheck.error}` },
+        { status: 400 }
+      );
+    }
 
     const client = postgres(process.env.DATABASE_URL!);
     const db = drizzle(client, { schema });

@@ -1,8 +1,94 @@
 import crypto from "crypto";
 import { logger } from "@/lib/logger";
+import net from "net";
 
 const MAX_FAIL_COUNT = 10;
 const WEBHOOK_TIMEOUT_MS = 10_000;
+
+/**
+ * Validate a webhook URL for SSRF prevention.
+ * Allows only http/https, blocks localhost, private/internal IPs,
+ * link-local, and metadata endpoint ranges.
+ */
+export function validateWebhookUrl(urlString: string): { valid: boolean; error?: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return { valid: false, error: "Invalid URL format" };
+  }
+
+  // Only allow http and https
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { valid: false, error: "Only http and https protocols are allowed" };
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block localhost variants
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname === "::1" ||
+    hostname === "0.0.0.0"
+  ) {
+    return { valid: false, error: "Localhost URLs are not allowed" };
+  }
+
+  // If the hostname is an IP address, check for private/internal ranges
+  if (net.isIPv4(hostname)) {
+    const parts = hostname.split(".").map(Number);
+
+    // 127.0.0.0/8 - loopback
+    if (parts[0] === 127) {
+      return { valid: false, error: "Loopback addresses are not allowed" };
+    }
+
+    // 10.0.0.0/8 - private
+    if (parts[0] === 10) {
+      return { valid: false, error: "Private network addresses are not allowed" };
+    }
+
+    // 172.16.0.0/12 - private
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) {
+      return { valid: false, error: "Private network addresses are not allowed" };
+    }
+
+    // 192.168.0.0/16 - private
+    if (parts[0] === 192 && parts[1] === 168) {
+      return { valid: false, error: "Private network addresses are not allowed" };
+    }
+
+    // 169.254.0.0/16 - link-local / cloud metadata
+    if (parts[0] === 169 && parts[1] === 254) {
+      return { valid: false, error: "Link-local and metadata addresses are not allowed" };
+    }
+
+    // 0.0.0.0/8
+    if (parts[0] === 0) {
+      return { valid: false, error: "Invalid address range" };
+    }
+  }
+
+  // Block IPv6 loopback and private ranges (bracket-wrapped in URLs)
+  const rawHost = hostname.replace(/^\[/, "").replace(/\]$/, "");
+  if (net.isIPv6(rawHost)) {
+    const normalized = rawHost.toLowerCase();
+    if (
+      normalized === "::1" ||
+      normalized === "::0" ||
+      normalized === "::" ||
+      normalized.startsWith("fe80") ||  // link-local
+      normalized.startsWith("fc") ||    // unique local
+      normalized.startsWith("fd")       // unique local
+    ) {
+      return { valid: false, error: "Private or loopback IPv6 addresses are not allowed" };
+    }
+  }
+
+  return { valid: true };
+}
 
 /**
  * Sign a payload using HMAC-SHA256
@@ -71,6 +157,12 @@ export async function dispatchWebhook(
         let responseBody: string | null = null;
 
         try {
+          // SSRF check before dispatch
+          const urlCheck = validateWebhookUrl(webhook.url);
+          if (!urlCheck.valid) {
+            throw new Error(`SSRF blocked: ${urlCheck.error}`);
+          }
+
           const headers: Record<string, string> = {
             "Content-Type": "application/json",
             "User-Agent": "oh-my-prompt/webhooks",
@@ -95,6 +187,7 @@ export async function dispatchWebhook(
             headers,
             body: bodyString,
             signal: controller.signal,
+            redirect: "error",  // Disable redirects to prevent SSRF via redirect
           });
 
           clearTimeout(timeoutId);
@@ -119,9 +212,9 @@ export async function dispatchWebhook(
             duration,
           });
 
-          // Update webhook status based on response
+          // Update webhook status based on response (atomic operations)
           if (statusCode >= 200 && statusCode < 300) {
-            // Success: reset fail count
+            // Success: reset fail count atomically
             await db
               .update(schema.webhooks)
               .set({
@@ -131,21 +224,26 @@ export async function dispatchWebhook(
               })
               .where(eq(schema.webhooks.id, webhook.id));
           } else {
-            // Non-2xx: increment fail count
-            const newFailCount = (webhook.failCount ?? 0) + 1;
-            await db
-              .update(schema.webhooks)
-              .set({
-                lastTriggeredAt: new Date(),
-                lastStatus: statusCode,
-                failCount: newFailCount,
-                isActive: newFailCount >= MAX_FAIL_COUNT ? false : webhook.isActive,
-              })
-              .where(eq(schema.webhooks.id, webhook.id));
+            // Non-2xx: increment fail count atomically and derive is_active from DB state
+            await db.execute(
+              sql`UPDATE webhooks SET
+                last_triggered_at = NOW(),
+                last_status = ${statusCode},
+                fail_count = fail_count + 1,
+                is_active = CASE WHEN fail_count + 1 >= ${MAX_FAIL_COUNT} THEN false ELSE is_active END
+              WHERE id = ${webhook.id}`
+            );
 
-            if (newFailCount >= MAX_FAIL_COUNT) {
+            // Check if we just hit the threshold for logging purposes
+            const [updated] = await db
+              .select({ failCount: schema.webhooks.failCount })
+              .from(schema.webhooks)
+              .where(eq(schema.webhooks.id, webhook.id))
+              .limit(1);
+
+            if (updated && (updated.failCount ?? 0) >= MAX_FAIL_COUNT) {
               logger.warn(
-                { webhookId: webhook.id, failCount: newFailCount },
+                { webhookId: webhook.id, failCount: updated.failCount },
                 "Webhook auto-disabled after repeated failures"
               );
             }
@@ -165,21 +263,26 @@ export async function dispatchWebhook(
             duration,
           });
 
-          // Increment fail count
-          const newFailCount = (webhook.failCount ?? 0) + 1;
-          await db
-            .update(schema.webhooks)
-            .set({
-              lastTriggeredAt: new Date(),
-              lastStatus: null,
-              failCount: newFailCount,
-              isActive: newFailCount >= MAX_FAIL_COUNT ? false : webhook.isActive,
-            })
-            .where(eq(schema.webhooks.id, webhook.id));
+          // Increment fail count atomically and derive is_active from DB state
+          await db.execute(
+            sql`UPDATE webhooks SET
+              last_triggered_at = NOW(),
+              last_status = NULL,
+              fail_count = fail_count + 1,
+              is_active = CASE WHEN fail_count + 1 >= ${MAX_FAIL_COUNT} THEN false ELSE is_active END
+            WHERE id = ${webhook.id}`
+          );
 
-          if (newFailCount >= MAX_FAIL_COUNT) {
+          // Check if we just hit the threshold for logging purposes
+          const [updated] = await db
+            .select({ failCount: schema.webhooks.failCount })
+            .from(schema.webhooks)
+            .where(eq(schema.webhooks.id, webhook.id))
+            .limit(1);
+
+          if (updated && (updated.failCount ?? 0) >= MAX_FAIL_COUNT) {
             logger.warn(
-              { webhookId: webhook.id, failCount: newFailCount },
+              { webhookId: webhook.id, failCount: updated.failCount },
               "Webhook auto-disabled after repeated failures"
             );
           }
@@ -223,6 +326,12 @@ export async function sendTestWebhook(
       return { success: false, statusCode: null, duration: 0, error: "Webhook not found" };
     }
 
+    // SSRF check before test dispatch
+    const urlCheck = validateWebhookUrl(webhook.url);
+    if (!urlCheck.valid) {
+      return { success: false, statusCode: null, duration: 0, error: `URL blocked: ${urlCheck.error}` };
+    }
+
     const testPayload = {
       event: "webhook.test",
       timestamp: new Date().toISOString(),
@@ -260,6 +369,7 @@ export async function sendTestWebhook(
         headers,
         body: bodyString,
         signal: controller.signal,
+        redirect: "error",  // Disable redirects to prevent SSRF via redirect
       });
 
       clearTimeout(timeoutId);

@@ -245,7 +245,9 @@ export const webhookLogs = pgTable("webhook_logs", {
   responseBody: text("response_body"),
   duration: integer("duration"),  // ms
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => [
+  index("idx_webhook_logs_webhook_created").on(table.webhookId, table.createdAt),
+]);
 
 // Webhook relations
 export const webhooksRelations = relations(webhooks, ({ one, many }) => ({

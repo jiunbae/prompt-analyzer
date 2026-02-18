@@ -6,6 +6,7 @@ import postgres from "postgres";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
+import { validateWebhookUrl } from "@/services/webhook";
 
 const VALID_EVENTS = [
   "prompt.created",
@@ -18,7 +19,8 @@ const VALID_EVENTS = [
 const updateWebhookSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   url: z.string().url().max(2048).optional(),
-  secret: z.string().max(255).optional().nullable(),
+  secret: z.string().max(255).optional(),
+  clearSecret: z.boolean().optional(),
   events: z
     .array(z.enum(VALID_EVENTS))
     .min(1, "At least one event is required")
@@ -45,7 +47,16 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid session" }, { status: 401 });
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Malformed JSON in request body" },
+        { status: 400 }
+      );
+    }
+
     const parseResult = updateWebhookSchema.safeParse(body);
     if (!parseResult.success) {
       return NextResponse.json(
@@ -56,6 +67,17 @@ export async function PUT(
 
     const updates = parseResult.data;
 
+    // SSRF prevention: validate webhook URL if being updated
+    if (updates.url !== undefined) {
+      const urlCheck = validateWebhookUrl(updates.url);
+      if (!urlCheck.valid) {
+        return NextResponse.json(
+          { error: `Invalid webhook URL: ${urlCheck.error}` },
+          { status: 400 }
+        );
+      }
+    }
+
     const client = postgres(process.env.DATABASE_URL!);
     const db = drizzle(client, { schema });
 
@@ -64,7 +86,18 @@ export async function PUT(
       const setValues: Record<string, unknown> = {};
       if (updates.name !== undefined) setValues.name = updates.name;
       if (updates.url !== undefined) setValues.url = updates.url;
-      if (updates.secret !== undefined) setValues.secret = updates.secret;
+
+      // Secret handling: only update if explicitly provided with a value,
+      // or explicitly cleared via clearSecret flag.
+      // When secret is undefined/empty, preserve existing secret.
+      if (updates.clearSecret === true) {
+        setValues.secret = null;
+      } else if (updates.secret !== undefined && updates.secret !== "") {
+        setValues.secret = updates.secret;
+      }
+      // If secret is undefined or empty string and clearSecret is not true,
+      // we do NOT include it in setValues, preserving the existing secret.
+
       if (updates.events !== undefined) setValues.events = updates.events;
       if (updates.isActive !== undefined) {
         setValues.isActive = updates.isActive;

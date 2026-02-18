@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
 
       // Fire webhook notification (non-blocking)
       dispatchWebhook(user.id, "prompt.created", { count: result.accepted }).catch((err) => {
-        logger.error({ error: err }, "Failed to dispatch webhook");
+        logger.error({ error: err, userId: user.id }, "Non-blocking webhook dispatch failed");
       });
     }
 
