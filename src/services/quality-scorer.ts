@@ -60,16 +60,16 @@ export function clarity(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
 
-  let score = 28;
+  let score = 42;
   const words = wordCount(trimmed);
 
-  if (trimmed.includes("?")) score += 12;
-  score += Math.min(30, countMatches(trimmed, IMPERATIVE_VERB_RE) * 7);
-  if (GOAL_RE.test(trimmed)) score += 18;
-  if (sentenceCount(trimmed) >= 2) score += 8;
-  if (words >= 12 && words <= 220) score += 10;
-  if (words < 8) score -= 16;
-  if (VAGUE_RE.test(trimmed)) score -= 12;
+  if (trimmed.includes("?")) score += 10;
+  score += Math.min(22, countMatches(trimmed, IMPERATIVE_VERB_RE) * 6);
+  if (GOAL_RE.test(trimmed)) score += 14;
+  if (sentenceCount(trimmed) >= 2) score += 6;
+  if (words >= 12 && words <= 220) score += 8;
+  if (words < 8) score -= 10;
+  if (VAGUE_RE.test(trimmed)) score -= 8;
 
   return clamp(score);
 }
@@ -78,19 +78,19 @@ export function specificity(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
 
-  let score = 20;
+  let score = 36;
   const filePathHits = countMatches(trimmed, FILE_PATH_RE);
   const codeRefHits = countMatches(trimmed, CODE_REF_RE);
   const numberHits = countMatches(trimmed, NUMBER_RE);
   const namedHits = countMatches(trimmed, NAMED_ENTITY_RE);
 
-  if (filePathHits > 0) score += Math.min(26, filePathHits * 10);
-  if (codeRefHits > 0) score += Math.min(24, codeRefHits * 8);
-  if (numberHits > 0) score += Math.min(16, numberHits * 4);
-  if (namedHits > 0) score += Math.min(14, namedHits * 7);
+  if (filePathHits > 0) score += Math.min(20, filePathHits * 8);
+  if (codeRefHits > 0) score += Math.min(18, codeRefHits * 6);
+  if (numberHits > 0) score += Math.min(12, numberHits * 4);
+  if (namedHits > 0) score += Math.min(10, namedHits * 5);
 
-  if (/\b(this|that|it|thing|stuff)\b/i.test(trimmed)) score -= 8;
-  if (filePathHits + codeRefHits + numberHits + namedHits >= 3) score += 10;
+  if (/\b(this|that|it|thing|stuff)\b/i.test(trimmed)) score -= 6;
+  if (filePathHits + codeRefHits + numberHits + namedHits >= 3) score += 8;
 
   return clamp(score);
 }
@@ -99,12 +99,12 @@ export function context(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
 
-  let score = 16;
+  let score = 34;
 
-  score += Math.min(36, countMatches(trimmed, CONTEXT_SIGNAL_RE) * 9);
-  if (BACKGROUND_RE.test(trimmed)) score += 18;
-  if (sentenceCount(trimmed) >= 3) score += 12;
-  if (/\b(currently|right now|already)\b/i.test(trimmed)) score += 10;
+  score += Math.min(26, countMatches(trimmed, CONTEXT_SIGNAL_RE) * 7);
+  if (BACKGROUND_RE.test(trimmed)) score += 14;
+  if (sentenceCount(trimmed) >= 3) score += 10;
+  if (/\b(currently|right now|already)\b/i.test(trimmed)) score += 8;
 
   return clamp(score);
 }
@@ -113,13 +113,13 @@ export function constraints(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
 
-  let score = 12;
+  let score = 30;
   const constraintHits = countMatches(trimmed, CONSTRAINT_SIGNAL_RE);
 
-  score += Math.min(50, constraintHits * 9);
-  if (HARD_LIMIT_RE.test(trimmed)) score += 18;
-  if (/\b(keep|preserve|maintain|stay within)\b/i.test(trimmed)) score += 10;
-  if (constraintHits === 0 && wordCount(trimmed) > 25) score -= 6;
+  score += Math.min(38, constraintHits * 8);
+  if (HARD_LIMIT_RE.test(trimmed)) score += 14;
+  if (/\b(keep|preserve|maintain|stay within)\b/i.test(trimmed)) score += 8;
+  if (constraintHits === 0 && wordCount(trimmed) > 25) score -= 4;
 
   return clamp(score);
 }
@@ -128,20 +128,20 @@ export function structure(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
 
-  let score = 20;
+  let score = 36;
   const bullets = countMatches(trimmed, BULLET_RE);
   const numbered = countMatches(trimmed, NUMBERED_RE);
   const sections = countMatches(trimmed, SECTION_RE);
 
-  if (bullets > 0) score += Math.min(24, bullets * 8);
-  if (numbered > 0) score += Math.min(20, numbered * 7);
-  if (sections > 0) score += Math.min(18, sections * 9);
-  if (/\n\s*\n/.test(trimmed)) score += 8;
+  if (bullets > 0) score += Math.min(18, bullets * 6);
+  if (numbered > 0) score += Math.min(16, numbered * 6);
+  if (sections > 0) score += Math.min(14, sections * 7);
+  if (/\n\s*\n/.test(trimmed)) score += 6;
 
   const chars = trimmed.length;
-  if (chars >= 80 && chars <= 1800) score += 16;
-  if (chars < 40) score -= 20;
-  if (chars > 3000) score -= 10;
+  if (chars >= 80 && chars <= 1800) score += 12;
+  if (chars < 40) score -= 14;
+  if (chars > 3000) score -= 6;
 
   return clamp(score);
 }

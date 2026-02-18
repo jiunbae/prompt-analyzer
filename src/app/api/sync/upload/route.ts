@@ -93,30 +93,37 @@ async function scoreUploadedPrompts(
         ),
       );
 
-    for (const prompt of promptsToScore) {
-      const score = scorePrompt(prompt.promptText);
-      await db
-        .update(schema.prompts)
-        .set({
-          qualityScore: score.overall,
-          qualityClarity: score.clarity,
-          qualitySpecificity: score.specificity,
-          qualityContext: score.context,
-          qualityConstraints: score.constraints,
-          qualityStructure: score.structure,
-          qualityDetails: {
-            method: "heuristic-v1",
-            ...score,
-          },
-          enrichedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(schema.prompts.id, prompt.id),
-            eq(schema.prompts.userId, userId),
-          ),
-        );
+    const now = new Date();
+    const SCORE_BATCH_SIZE = 50;
+    for (let i = 0; i < promptsToScore.length; i += SCORE_BATCH_SIZE) {
+      const batch = promptsToScore.slice(i, i + SCORE_BATCH_SIZE);
+      await Promise.all(
+        batch.map((prompt) => {
+          const score = scorePrompt(prompt.promptText);
+          return db
+            .update(schema.prompts)
+            .set({
+              qualityScore: score.overall,
+              qualityClarity: score.clarity,
+              qualitySpecificity: score.specificity,
+              qualityContext: score.context,
+              qualityConstraints: score.constraints,
+              qualityStructure: score.structure,
+              qualityDetails: {
+                method: "heuristic-v1",
+                ...score,
+              },
+              enrichedAt: now,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(schema.prompts.id, prompt.id),
+                eq(schema.prompts.userId, userId),
+              ),
+            );
+        }),
+      );
     }
 
     return promptsToScore.length;
@@ -158,13 +165,23 @@ export async function POST(request: NextRequest) {
     // Parse request body
     let rawBody;
     try {
-      rawBody = await request.json();
+      const rawText = await request.text();
+      if (rawText.length > MAX_BODY_SIZE) {
+        return NextResponse.json(
+          { error: `Request body too large. Maximum ${MAX_BODY_SIZE / 1024 / 1024}MB.` },
+          { status: 413 }
+        );
+      }
+      rawBody = JSON.parse(rawText);
     } catch (error) {
-      logger.error({ error }, "Failed to parse request body as JSON");
-      return NextResponse.json(
-        { error: "Invalid JSON in request body" },
-        { status: 400 }
-      );
+      if (error instanceof SyntaxError) {
+        logger.error({ error }, "Failed to parse request body as JSON");
+        return NextResponse.json(
+          { error: "Invalid JSON in request body" },
+          { status: 400 }
+        );
+      }
+      throw error;
     }
 
     // Validate with Zod

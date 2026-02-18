@@ -66,13 +66,14 @@ function colorForScore(score: number) {
 }
 
 export function QualityBreakdown({ current, average, className }: QualityBreakdownProps) {
+  // Weighted mean matching backend: clarity 0.25, specificity 0.25,
+  // context 0.20, constraints 0.15, structure 0.15
   const currentAverage = clampScore(
-    (current.clarity +
-      current.specificity +
-      current.context +
-      current.constraints +
-      current.structure) /
-      5,
+    current.clarity * 0.25 +
+      current.specificity * 0.25 +
+      current.context * 0.2 +
+      current.constraints * 0.15 +
+      current.structure * 0.15,
   );
 
   const palette = colorForScore(currentAverage);

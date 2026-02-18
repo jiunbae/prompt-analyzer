@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
 import { sql, eq, and, isNull } from "drizzle-orm";
+import { scorePrompt } from "@/services/quality-scorer";
 
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 function getDb() {
@@ -229,12 +230,21 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
             batch.map((p) => p.id),
           );
 
-          // Update database with LLM scores
+          // Update database with LLM scores + heuristic dimensions
+          const batchPromptMap = new Map(batch.map((p) => [p.id, p]));
           for (const score of scores) {
+            const promptData = batchPromptMap.get(score.id);
+            const dims = promptData ? scorePrompt(promptData.promptText) : null;
             await db
               .update(schema.prompts)
               .set({
                 qualityScore: score.quality_score,
+                qualityClarity: dims?.clarity ?? null,
+                qualitySpecificity: dims?.specificity ?? null,
+                qualityContext: dims?.context ?? null,
+                qualityConstraints: dims?.constraints ?? null,
+                qualityStructure: dims?.structure ?? null,
+                qualityDetails: dims ? { method: "llm+heuristic-v1", llmScore: score.quality_score, ...dims } : null,
                 topicTags: score.topic_tags,
                 enrichedAt: new Date(),
               })
@@ -259,10 +269,17 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
               const heuristic = computeHeuristicScore(prompt.promptText, {
                 hasContext: !!(prompt.projectName || prompt.workingDirectory),
               });
+              const dims = scorePrompt(prompt.promptText);
               await db
                 .update(schema.prompts)
                 .set({
                   qualityScore: heuristic.qualityScore,
+                  qualityClarity: dims.clarity,
+                  qualitySpecificity: dims.specificity,
+                  qualityContext: dims.context,
+                  qualityConstraints: dims.constraints,
+                  qualityStructure: dims.structure,
+                  qualityDetails: { method: "heuristic-v1", ...dims },
                   topicTags: heuristic.topicTags,
                   enrichedAt: new Date(),
                 })
@@ -287,10 +304,17 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
             const heuristic = computeHeuristicScore(prompt.promptText, {
               hasContext: !!(prompt.projectName || prompt.workingDirectory),
             });
+            const dims = scorePrompt(prompt.promptText);
             await db
               .update(schema.prompts)
               .set({
                 qualityScore: heuristic.qualityScore,
+                qualityClarity: dims.clarity,
+                qualitySpecificity: dims.specificity,
+                qualityContext: dims.context,
+                qualityConstraints: dims.constraints,
+                qualityStructure: dims.structure,
+                qualityDetails: { method: "heuristic-v1", ...dims },
                 topicTags: heuristic.topicTags,
                 enrichedAt: new Date(),
               })
@@ -314,10 +338,17 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
           const heuristic = computeHeuristicScore(prompt.promptText, {
             hasContext: !!(prompt.projectName || prompt.workingDirectory),
           });
+          const dims = scorePrompt(prompt.promptText);
           await db
             .update(schema.prompts)
             .set({
               qualityScore: heuristic.qualityScore,
+              qualityClarity: dims.clarity,
+              qualitySpecificity: dims.specificity,
+              qualityContext: dims.context,
+              qualityConstraints: dims.constraints,
+              qualityStructure: dims.structure,
+              qualityDetails: { method: "heuristic-v1", ...dims },
               topicTags: heuristic.topicTags,
               enrichedAt: new Date(),
             })
