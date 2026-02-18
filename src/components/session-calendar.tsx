@@ -31,6 +31,29 @@ function formatTooltipDate(dateStr: string): string {
   });
 }
 
+/**
+ * Compute quantile-based color thresholds for the heatmap.
+ * Uses percentiles of non-zero values so outliers don't flatten the scale.
+ */
+function computeQuantileThresholds(data: DayData[]): [number, number, number, number] {
+  const nonZero = data.map((d) => d.sessionCount).filter((c) => c > 0).sort((a, b) => a - b);
+  if (nonZero.length === 0) return [1, 2, 3, 4];
+
+  const p = (pct: number) => {
+    const idx = Math.min(Math.floor(pct * nonZero.length), nonZero.length - 1);
+    return nonZero[idx];
+  };
+
+  const q25 = p(0.25);
+  const q50 = p(0.5);
+  const q75 = p(0.75);
+  const q100 = nonZero[nonZero.length - 1];
+
+  // Ensure strictly increasing thresholds (fall back to max-relative when data is too uniform)
+  if (q25 === q100) return [q25, q25 + 1, q25 + 2, q25 + 3];
+  return [q25, q50, q75, q100];
+}
+
 export function SessionCalendar({ data, selectedDate, onSelectDate }: SessionCalendarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipState>({
@@ -66,9 +89,11 @@ export function SessionCalendar({ data, selectedDate, onSelectDate }: SessionCal
   }
 
   const countMap = new Map(data.map((d) => [d.date, d.sessionCount]));
-  const maxCount = Math.max(...data.map((d) => d.sessionCount), 1);
   const totalSessions = data.reduce((sum, d) => sum + d.sessionCount, 0);
   const activeDays = data.filter((d) => d.sessionCount > 0).length;
+
+  // Quantile-based thresholds for better color distribution
+  const [q25, q50, q75] = computeQuantileThresholds(data);
 
   // Build full calendar grid for the year
   const sortedDates = [...data].sort((a, b) => a.date.localeCompare(b.date));
@@ -116,9 +141,9 @@ export function SessionCalendar({ data, selectedDate, onSelectDate }: SessionCal
   const getColor = (count: number, inRange: boolean) => {
     if (!inRange) return "bg-transparent";
     if (count === 0) return "bg-secondary/50 dark:bg-secondary/30";
-    if (count < maxCount * 0.25) return "bg-blue-200 dark:bg-blue-900/60";
-    if (count < maxCount * 0.5) return "bg-blue-400 dark:bg-blue-700/80";
-    if (count < maxCount * 0.75) return "bg-blue-500 dark:bg-blue-500";
+    if (count <= q25) return "bg-blue-200 dark:bg-blue-900/60";
+    if (count <= q50) return "bg-blue-400 dark:bg-blue-700/80";
+    if (count <= q75) return "bg-blue-500 dark:bg-blue-500";
     return "bg-blue-600 dark:bg-blue-400";
   };
 

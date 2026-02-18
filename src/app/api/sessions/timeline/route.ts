@@ -4,6 +4,17 @@ import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+const DEFAULT_LIMIT = 500;
+const MAX_LIMIT = 2000;
+
+/** Validate a YYYY-MM-DD string and return a Date (UTC midnight) or null. */
+function parseDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = new Date(value + "T00:00:00Z");
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -21,25 +32,37 @@ export async function GET(request: NextRequest) {
     const toParam = searchParams.get("to");
     const project = searchParams.get("project") || null;
     const source = searchParams.get("source") || null;
+    const limitParam = searchParams.get("limit");
+    const offsetParam = searchParams.get("offset");
 
-    // Default range: last 90 days
-    const now = new Date();
-    const defaultFrom = new Date(now);
-    defaultFrom.setDate(defaultFrom.getDate() - 90);
-    defaultFrom.setUTCHours(0, 0, 0, 0);
-
-    const from = fromParam ? new Date(fromParam) : defaultFrom;
-    const to = toParam ? new Date(toParam) : now;
-
-    // Make 'to' inclusive of the whole day
-    if (toParam && /^\d{4}-\d{2}-\d{2}$/.test(toParam)) {
-      to.setHours(23, 59, 59, 999);
+    // Validate date params
+    if (fromParam && !parseDate(fromParam)) {
+      return NextResponse.json({ error: "Invalid 'from' date. Expected YYYY-MM-DD." }, { status: 400 });
     }
+    if (toParam && !parseDate(toParam)) {
+      return NextResponse.json({ error: "Invalid 'to' date. Expected YYYY-MM-DD." }, { status: 400 });
+    }
+
+    // Default range: last 90 days (all UTC)
+    const now = new Date();
+    const defaultFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90));
+
+    const from = fromParam ? parseDate(fromParam)! : defaultFrom;
+
+    // Use exclusive upper bound: to < (toDate + 1 day) — avoids setHours timezone skew
+    const toDateUTC = toParam
+      ? parseDate(toParam)!
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const toExclusive = new Date(toDateUTC.getTime() + 24 * 60 * 60 * 1000);
+
+    // Pagination
+    const limit = Math.min(Math.max(parseInt(limitParam ?? String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1), MAX_LIMIT);
+    const offset = Math.max(parseInt(offsetParam ?? "0", 10) || 0, 0);
 
     const { drizzle } = await import("drizzle-orm/postgres-js");
     const postgresModule = await import("postgres");
     const schema = await import("@/db/schema");
-    const { eq, and, gte, lte, sql } = await import("drizzle-orm");
+    const { eq, and, gte, lt, sql } = await import("drizzle-orm");
 
     const client = postgresModule.default(process.env.DATABASE_URL!);
     const db = drizzle(client, { schema });
@@ -49,13 +72,23 @@ export async function GET(request: NextRequest) {
         eq(schema.prompts.userId, session.userId),
         sql`${schema.prompts.sessionId} IS NOT NULL`,
         gte(schema.prompts.timestamp, from),
-        lte(schema.prompts.timestamp, to),
+        lt(schema.prompts.timestamp, toExclusive),
       ];
 
       if (project) conditions.push(eq(schema.prompts.projectName, project));
       if (source) conditions.push(eq(schema.prompts.source, source));
 
       const whereClause = and(...conditions);
+
+      // Count total sessions for pagination metadata
+      const countResult = await db.execute(sql`
+        SELECT COUNT(DISTINCT ${schema.prompts.sessionId})::int as total
+        FROM ${schema.prompts}
+        WHERE ${whereClause}
+      `);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const countRows = ((countResult as any).rows ?? countResult) as Record<string, unknown>[];
+      const totalCount = Number(countRows[0]?.total ?? 0);
 
       const sessionsResult = await db.execute(sql`
         SELECT
@@ -71,12 +104,14 @@ export async function GET(request: NextRequest) {
         WHERE ${whereClause}
         GROUP BY ${schema.prompts.sessionId}
         ORDER BY MIN(${schema.prompts.timestamp}) ASC
+        LIMIT ${sql.raw(String(limit))}
+        OFFSET ${sql.raw(String(offset))}
       `);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows = ((sessionsResult as any).rows ?? sessionsResult) as Record<string, unknown>[];
 
-      // Group sessions by day
+      // Group sessions by day (UTC)
       const dayMap = new Map<string, Array<{
         sessionId: string;
         startedAt: string;
@@ -90,12 +125,14 @@ export async function GET(request: NextRequest) {
       }>>();
 
       for (const row of rows) {
-        const startedAt = String(row.started_at);
-        const endedAt = String(row.ended_at);
-        const startDate = new Date(startedAt);
-        const dateKey = startDate.toISOString().slice(0, 10);
+        // Use toISOString() for stable, timezone-safe serialization
+        const startDate = new Date(String(row.started_at));
+        const endDate = new Date(String(row.ended_at));
+        const startedAt = startDate.toISOString();
+        const endedAt = endDate.toISOString();
+        const dateKey = startedAt.slice(0, 10); // UTC date
 
-        const durationMs = new Date(endedAt).getTime() - startDate.getTime();
+        const durationMs = endDate.getTime() - startDate.getTime();
         const durationMinutes = Math.round(durationMs / 60000);
 
         const sessionData = {
@@ -122,7 +159,15 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([date, sessions]) => ({ date, sessions }));
 
-      return NextResponse.json({ days });
+      return NextResponse.json({
+        days,
+        pagination: {
+          total: totalCount,
+          limit,
+          offset,
+          hasMore: offset + limit < totalCount,
+        },
+      });
     } finally {
       await client.end();
     }

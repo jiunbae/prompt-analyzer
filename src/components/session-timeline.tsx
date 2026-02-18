@@ -81,6 +81,31 @@ function getSourceBorderColor(source: string | null): string {
   }
 }
 
+/**
+ * Compute bar position using UTC hours consistently.
+ * Handles sessions that cross midnight by clamping to the 0-24 range
+ * and computing duration as absolute elapsed time.
+ */
+function computeBarPosition(session: TimelineSession): { leftPct: number; widthPct: number } {
+  const startTime = new Date(session.startedAt);
+  const endTime = new Date(session.endedAt);
+
+  // Use UTC hours for consistency with UTC-based day grouping
+  const startHour = startTime.getUTCHours() + startTime.getUTCMinutes() / 60;
+
+  // Compute duration in hours from absolute timestamps (avoids negative width for midnight-crossing)
+  const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+
+  // If the session is unreasonably long (>24h), cap it at end of day
+  const effectiveDuration = Math.min(durationHours, 24 - startHour);
+
+  const leftPct = (startHour / 24) * 100;
+  // Ensure a minimum visible width
+  const widthPct = Math.max((effectiveDuration / 24) * 100, 0.5);
+
+  return { leftPct, widthPct };
+}
+
 const HOUR_LABELS = ["0", "3", "6", "9", "12", "15", "18", "21", "24"];
 const TIMELINE_WIDTH = 720; // px for the 24h axis
 
@@ -183,14 +208,7 @@ export function SessionTimeline({ days }: SessionTimelineProps) {
 
               {/* Session bars */}
               {day.sessions.map((session) => {
-                const startTime = new Date(session.startedAt);
-                const endTime = new Date(session.endedAt);
-                const startHour = startTime.getHours() + startTime.getMinutes() / 60;
-                const endHour = endTime.getHours() + endTime.getMinutes() / 60;
-
-                const leftPct = (startHour / 24) * 100;
-                // Ensure a minimum visible width
-                const widthPct = Math.max((endHour - startHour) / 24 * 100, 0.5);
+                const { leftPct, widthPct } = computeBarPosition(session);
 
                 return (
                   <div

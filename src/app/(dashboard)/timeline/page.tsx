@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SessionCalendar } from "@/components/session-calendar";
@@ -23,9 +23,19 @@ interface TimelineDay {
   sessions: TimelineSession[];
 }
 
+interface PaginationInfo {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 interface TimelineData {
   days: TimelineDay[];
+  pagination?: PaginationInfo;
 }
+
+const PAGE_SIZE = 500;
 
 export default function TimelinePage() {
   const router = useRouter();
@@ -34,6 +44,7 @@ export default function TimelinePage() {
   const [data, setData] = useState<TimelineData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const selectedDate = searchParams.get("date") || null;
   const projectFilter = searchParams.get("project") || null;
@@ -43,9 +54,18 @@ export default function TimelinePage() {
   const fromParam = searchParams.get("from") || null;
   const toParam = searchParams.get("to") || null;
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchData = useCallback(async (offset = 0, append = false) => {
+    // Abort any in-flight request to prevent stale data
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    if (!append) {
+      setLoading(true);
+      setError(null);
+    }
 
     const params = new URLSearchParams();
     if (fromParam) {
@@ -62,24 +82,65 @@ export default function TimelinePage() {
     }
     if (projectFilter) params.set("project", projectFilter);
     if (sourceFilter) params.set("source", sourceFilter);
+    params.set("limit", String(PAGE_SIZE));
+    params.set("offset", String(offset));
 
     try {
-      const res = await fetch(`/api/sessions/timeline?${params.toString()}`);
+      const res = await fetch(`/api/sessions/timeline?${params.toString()}`, {
+        signal: controller.signal,
+      });
       if (!res.ok) {
-        throw new Error("Failed to load timeline data");
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to load timeline data");
       }
-      const json = await res.json();
-      setData(json);
+      const json: TimelineData = await res.json();
+
+      if (append && data) {
+        // Merge new days into existing data
+        const existingDayMap = new Map(data.days.map((d) => [d.date, d]));
+        for (const day of json.days) {
+          const existing = existingDayMap.get(day.date);
+          if (existing) {
+            existing.sessions.push(...day.sessions);
+          } else {
+            existingDayMap.set(day.date, day);
+          }
+        }
+        const mergedDays = Array.from(existingDayMap.values()).sort((a, b) =>
+          a.date.localeCompare(b.date)
+        );
+        setData({ days: mergedDays, pagination: json.pagination });
+      } else {
+        setData(json);
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return; // Silently ignore aborted requests
+      }
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
-  }, [fromParam, toParam, projectFilter, sourceFilter]);
+  }, [fromParam, toParam, projectFilter, sourceFilter, data]);
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    return () => {
+      // Cleanup: abort on unmount or dependency change
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromParam, toParam, projectFilter, sourceFilter]);
+
+  const loadMore = useCallback(() => {
+    if (data?.pagination?.hasMore) {
+      fetchData(data.pagination.offset + data.pagination.limit, true);
+    }
+  }, [data, fetchData]);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -301,6 +362,18 @@ export default function TimelinePage() {
               <div className="overflow-x-auto">
                 <SessionTimeline days={timelineDays} />
               </div>
+              {/* Load more button for pagination */}
+              {data?.pagination?.hasMore && !selectedDate && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-secondary/50 transition-colors"
+                  >
+                    Load more sessions ({data.pagination.total - data.pagination.offset - data.pagination.limit} remaining)
+                  </button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>
