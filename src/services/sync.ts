@@ -61,20 +61,21 @@ async function getDb() {
   return { db, promptsTable };
 }
 
-export async function updateDailyAnalytics(dateStr: string) {
+export async function updateDailyAnalytics(dateStr: string, userId: string) {
   const { db } = await getDb();
   const schema = await import("@/db/schema");
-  const { eq, sql } = await import("drizzle-orm");
+  const { and, eq, sql } = await import("drizzle-orm");
 
   const [stats] = await db
     .select({
       count: sql<number>`count(*)`,
-      totalChars: sql<number>`sum(prompt_length + coalesce(response_length, 0))`,
-      totalTokens: sql<number>`sum(token_estimate + coalesce(token_estimate_response, 0))`,
+      totalChars: sql<number>`coalesce(sum(prompt_length + coalesce(response_length, 0)), 0)`,
+      totalTokens: sql<number>`coalesce(sum(token_estimate + coalesce(token_estimate_response, 0)), 0)`,
+      totalResponseTokens: sql<number>`coalesce(sum(token_estimate_response), 0)`,
       uniqueProjects: sql<number>`count(distinct project_name)`,
     })
     .from(schema.prompts)
-    .where(sql`date(timestamp) = ${dateStr}`);
+    .where(and(sql`date(timestamp) = ${dateStr}`, eq(schema.prompts.userId, userId)));
 
   if (stats) {
     const avgLength = stats.count > 0 ? Number(stats.totalChars) / stats.count : 0;
@@ -82,20 +83,23 @@ export async function updateDailyAnalytics(dateStr: string) {
     await db
       .insert(schema.analyticsDaily)
       .values({
+        userId,
         date: dateStr,
         promptCount: Number(stats.count),
         totalChars: Number(stats.totalChars),
         totalTokensEst: Number(stats.totalTokens),
+        totalResponseTokens: Number(stats.totalResponseTokens),
         uniqueProjects: Number(stats.uniqueProjects),
         avgPromptLength: String(avgLength.toFixed(2)),
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: schema.analyticsDaily.date,
+        target: [schema.analyticsDaily.userId, schema.analyticsDaily.date],
         set: {
           promptCount: Number(stats.count),
           totalChars: Number(stats.totalChars),
           totalTokensEst: Number(stats.totalTokens),
+          totalResponseTokens: Number(stats.totalResponseTokens),
           uniqueProjects: Number(stats.uniqueProjects),
           avgPromptLength: String(avgLength.toFixed(2)),
           updatedAt: new Date(),

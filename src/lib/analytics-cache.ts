@@ -55,22 +55,24 @@ export async function refreshDailyAggregations(
       )
       .groupBy(sql`date(${schema.prompts.timestamp})`);
 
-    // Upsert each day's aggregation using raw SQL for ON CONFLICT on (user_id, date)
-    for (const row of dailyRows) {
-      await db.execute(sql`
-        INSERT INTO analytics_daily (id, user_id, date, prompt_count, total_chars, total_tokens_est, total_response_tokens, unique_projects, avg_prompt_length, updated_at)
-        VALUES (gen_random_uuid(), ${userId}, ${row.date}, ${row.promptCount}, ${row.totalChars}, ${row.totalTokensEst}, ${row.totalResponseTokens}, ${row.uniqueProjects}, ${row.avgPromptLength}, now())
-        ON CONFLICT (user_id, date)
-        DO UPDATE SET
-          prompt_count = EXCLUDED.prompt_count,
-          total_chars = EXCLUDED.total_chars,
-          total_tokens_est = EXCLUDED.total_tokens_est,
-          total_response_tokens = EXCLUDED.total_response_tokens,
-          unique_projects = EXCLUDED.unique_projects,
-          avg_prompt_length = EXCLUDED.avg_prompt_length,
-          updated_at = now()
-      `);
-    }
+    // Upsert all days in a single transaction for consistency
+    await db.transaction(async (tx: typeof db) => {
+      for (const row of dailyRows) {
+        await tx.execute(sql`
+          INSERT INTO analytics_daily (id, user_id, date, prompt_count, total_chars, total_tokens_est, total_response_tokens, unique_projects, avg_prompt_length, updated_at)
+          VALUES (gen_random_uuid(), ${userId}, ${row.date}, ${row.promptCount}, ${row.totalChars}, ${row.totalTokensEst}, ${row.totalResponseTokens}, ${row.uniqueProjects}, ${row.avgPromptLength}, now())
+          ON CONFLICT (user_id, date)
+          DO UPDATE SET
+            prompt_count = EXCLUDED.prompt_count,
+            total_chars = EXCLUDED.total_chars,
+            total_tokens_est = EXCLUDED.total_tokens_est,
+            total_response_tokens = EXCLUDED.total_response_tokens,
+            unique_projects = EXCLUDED.unique_projects,
+            avg_prompt_length = EXCLUDED.avg_prompt_length,
+            updated_at = now()
+        `);
+      }
+    });
   } finally {
     await client.end();
   }

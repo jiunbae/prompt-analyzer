@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { env } from "@/env";
-import { updateDailyAnalytics } from "./sync";
+import { refreshDailyAggregations } from "@/lib/analytics-cache";
 import type { UploadRecord, UploadResult } from "./upload-types";
 import { postprocessUploadRecordForDb } from "./upload-postprocess";
 import { computeHeuristicScore } from "@/extensions/prompt-quality/processor";
@@ -152,12 +152,13 @@ export async function processUpload(
       }
     }
 
-    // Update daily analytics for affected dates
-    for (const date of affectedDates) {
+    // Refresh daily analytics aggregations for this user
+    if (affectedDates.size > 0) {
       try {
-        await updateDailyAnalytics(date);
+        const earliest = [...affectedDates].sort()[0];
+        await refreshDailyAggregations(userId, new Date(earliest));
       } catch (error) {
-        logger.error({ error, date }, "Failed to update daily analytics");
+        logger.error({ error }, "Failed to refresh daily analytics aggregations");
       }
     }
   } finally {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByToken, updateDailyAnalytics } from "@/services/sync";
+import { findUserByToken } from "@/services/sync";
 import { logger } from "@/lib/logger";
 
 export async function DELETE(request: NextRequest) {
@@ -23,7 +23,7 @@ export async function DELETE(request: NextRequest) {
 
     const postgres = (await import("postgres")).default;
     const { drizzle } = await import("drizzle-orm/postgres-js");
-    const { eq, sql } = await import("drizzle-orm");
+    const { eq } = await import("drizzle-orm");
     const schema = await import("@/db/schema");
     const { env } = await import("@/env");
 
@@ -31,26 +31,16 @@ export async function DELETE(request: NextRequest) {
     const db = drizzle(client, { schema });
 
     try {
-      // Collect affected dates before deleting
-      const affectedDates = await db
-        .selectDistinct({ date: sql<string>`date(timestamp)` })
-        .from(schema.prompts)
-        .where(eq(schema.prompts.userId, user.id));
-
       // Delete prompts (prompt_tags cascade via ON DELETE CASCADE)
       const result = await db
         .delete(schema.prompts)
         .where(eq(schema.prompts.userId, user.id))
         .returning({ id: schema.prompts.id });
 
-      // Recalculate analytics for affected dates
-      for (const { date } of affectedDates) {
-        try {
-          await updateDailyAnalytics(date);
-        } catch (error) {
-          logger.error({ error, date }, "Failed to recalculate analytics");
-        }
-      }
+      // Delete stale analytics_daily rows for this user (no prompts remain)
+      await db
+        .delete(schema.analyticsDaily)
+        .where(eq(schema.analyticsDaily.userId, user.id));
 
       logger.info({ userId: user.id, deleted: result.length }, "User data flushed");
 

@@ -27,9 +27,11 @@ export const analyticsRouter = createTRPCRouter({
         to: z.string().optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const db = getDb();
-      const conditions = [];
+      const conditions = [
+        eq(schema.analyticsDaily.userId, ctx.user.id),
+      ];
 
       if (input.from) {
         conditions.push(gte(schema.analyticsDaily.date, input.from));
@@ -38,12 +40,10 @@ export const analyticsRouter = createTRPCRouter({
         conditions.push(lte(schema.analyticsDaily.date, input.to));
       }
 
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
       return await db
         .select()
         .from(schema.analyticsDaily)
-        .where(whereClause)
+        .where(and(...conditions))
         .orderBy(schema.analyticsDaily.date);
     }),
 
