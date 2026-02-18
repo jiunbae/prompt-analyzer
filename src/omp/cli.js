@@ -715,6 +715,8 @@ function handleSyncAuto(options, positional) {
     const result = stopDaemon();
     if (options.json) {
       printJson(result);
+    } else if (result.stopped && result.timedOut) {
+      console.log(`Auto-sync daemon force-killed after timeout (pid ${result.pid}).`);
     } else if (result.stopped) {
       console.log(`Auto-sync daemon stopped (pid ${result.pid}).`);
     } else {

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { execSync } = require("child_process");
 const { getConfigDir, ensureDir } = require("./paths");
 
 const TRIGGER_FILE = path.join(getConfigDir(), "sync-trigger");
@@ -16,6 +17,10 @@ const MAX_DEBOUNCE_S = 3600; // 1 hour
 const MAX_INTERVAL_S = 86400; // 24 hours
 
 const SHUTDOWN_TIMEOUT_MS = 15000; // 15 seconds max to drain
+const STOP_POLL_INTERVAL_MS = 200; // poll interval when waiting for daemon to stop
+const STOP_TIMEOUT_MS = SHUTDOWN_TIMEOUT_MS + 5000; // total wait for stop (drain + margin)
+
+const DAEMON_PROCESS_TITLE = "omp-auto-sync";
 
 function appendLog(message) {
   const ts = new Date().toISOString();
@@ -100,6 +105,7 @@ function writePidInfo(pid) {
   const info = {
     pid,
     startedAt: Date.now(),
+    command: DAEMON_PROCESS_TITLE,
   };
   ensureDir(path.dirname(PID_FILE));
   fs.writeFileSync(PID_FILE, JSON.stringify(info), { mode: 0o600 });
@@ -124,30 +130,66 @@ function isProcessAlive(pid) {
 }
 
 /**
+ * Get the command line of a running process by PID.
+ * On Linux reads /proc/{pid}/cmdline; on macOS uses `ps`.
+ * Returns the command string, or null if it cannot be determined.
+ */
+function getProcessCommand(pid) {
+  try {
+    // Try /proc first (Linux)
+    const cmdlinePath = `/proc/${pid}/cmdline`;
+    if (fs.existsSync(cmdlinePath)) {
+      const raw = fs.readFileSync(cmdlinePath, "utf-8");
+      // /proc/pid/cmdline uses NUL separators
+      return raw.replace(/\0/g, " ").trim();
+    }
+  } catch {
+    // /proc not available or not readable — fall through to ps
+  }
+
+  try {
+    // macOS / BSD fallback
+    const output = execSync(`ps -p ${pid} -o command=`, {
+      encoding: "utf-8",
+      timeout: 3000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return output.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verify that the PID recorded in the PID file actually belongs to our daemon
- * by checking both liveness and start-time freshness. On Unix we cannot
- * cheaply read /proc, so we rely on startedAt: if the PID file was written
- * longer ago than the maximum realistic uptime drift (a few seconds), and the
- * process is alive, we still trust it. But if the PID file has no startedAt
- * (legacy format) we fall back to liveness-only.
+ * by checking liveness and confirming the running process command matches the
+ * expected daemon process title ("omp-auto-sync").
+ *
+ * On startup the daemon sets process.title = DAEMON_PROCESS_TITLE, and the PID
+ * file stores the expected command string. Verification reads the actual
+ * process command via /proc/{pid}/cmdline (Linux) or `ps` (macOS) and checks
+ * that it contains the expected title.
  */
 function verifyDaemonIdentity(pidInfo) {
   if (!pidInfo || !pidInfo.pid) return false;
   if (!isProcessAlive(pidInfo.pid)) return false;
 
-  // If we have a start timestamp, verify it is recent enough to be plausible.
-  // A reused PID from a completely different process would not match the
-  // startedAt written by our daemon. We accept any living process whose PID
-  // file startedAt is within the last 365 days (essentially: was written by us).
-  if (pidInfo.startedAt) {
-    const age = Date.now() - pidInfo.startedAt;
-    if (age < 0 || age > 365 * 24 * 60 * 60 * 1000) {
-      // Implausible age — treat as stale
-      return false;
+  // Determine expected command string from pidfile, fall back to the constant
+  const expectedCommand = pidInfo.command || DAEMON_PROCESS_TITLE;
+
+  const actualCommand = getProcessCommand(pidInfo.pid);
+  if (!actualCommand) {
+    // Cannot determine process command — fall back to timestamp plausibility
+    // so we don't break on platforms where ps is unavailable
+    if (pidInfo.startedAt) {
+      const age = Date.now() - pidInfo.startedAt;
+      return age >= 0 && age < 365 * 24 * 60 * 60 * 1000;
     }
+    return false;
   }
 
-  return true;
+  // Check if the actual command contains our daemon process title
+  return actualCommand.includes(expectedCommand);
 }
 
 function isDaemonRunning() {
@@ -195,6 +237,9 @@ function runDaemonLoop(configPath) {
   const { loadConfig } = require("./config");
   const { syncToServer } = require("./sync");
   const { acquireSyncLock, releaseSyncLock } = require("./sync-lock");
+
+  // Set process title for identity verification via ps / /proc
+  process.title = DAEMON_PROCESS_TITLE;
 
   // Override config path if provided
   if (configPath) {
@@ -416,6 +461,13 @@ function startDaemon(config) {
   return { started: true, alreadyRunning: false, pid: child.pid };
 }
 
+/**
+ * Stop the daemon by sending SIGTERM and waiting for it to drain and remove
+ * its own PID file. Polls until the pidfile disappears or the process exits,
+ * with a timeout. The daemon's shutdown handler is responsible for removing
+ * the pidfile after drain completes, so status remains "running" until drain
+ * is finished.
+ */
 function stopDaemon() {
   const pidInfo = readPidInfo();
   if (!pidInfo || !verifyDaemonIdentity(pidInfo)) {
@@ -427,10 +479,38 @@ function stopDaemon() {
     process.kill(pidInfo.pid, "SIGTERM");
   } catch {
     // process may have already exited
+    removePid();
+    return { stopped: true, wasRunning: true, pid: pidInfo.pid };
   }
 
+  // Poll for the daemon to finish draining and remove its own pidfile
+  const deadline = Date.now() + STOP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    // Check if pidfile is gone (daemon removed it after drain)
+    if (!fs.existsSync(PID_FILE)) {
+      return { stopped: true, wasRunning: true, pid: pidInfo.pid };
+    }
+    // Check if process exited (but pidfile might linger on crash)
+    if (!isProcessAlive(pidInfo.pid)) {
+      removePid(); // clean up orphaned pidfile
+      return { stopped: true, wasRunning: true, pid: pidInfo.pid };
+    }
+    // Synchronous sleep — acceptable in a CLI stop command
+    try {
+      execSync(`sleep ${STOP_POLL_INTERVAL_MS / 1000}`, { stdio: "ignore" });
+    } catch {
+      // ignore
+    }
+  }
+
+  // Timeout — force kill and clean up
+  try {
+    process.kill(pidInfo.pid, "SIGKILL");
+  } catch {
+    // already dead
+  }
   removePid();
-  return { stopped: true, wasRunning: true, pid: pidInfo.pid };
+  return { stopped: true, wasRunning: true, pid: pidInfo.pid, timedOut: true };
 }
 
 function daemonStatus() {
