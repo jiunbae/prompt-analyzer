@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q")?.trim();
     const mode = (searchParams.get("mode") || "hybrid") as SearchMode;
-    const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 100);
+    const parsedLimit = parseInt(searchParams.get("limit") ?? "20", 10);
 
     if (!query) {
       return NextResponse.json({ error: "Query parameter 'q' is required" }, { status: 400 });
@@ -48,6 +48,11 @@ export async function GET(request: NextRequest) {
     if (!["keyword", "semantic", "hybrid"].includes(mode)) {
       return NextResponse.json({ error: "Invalid mode. Use: keyword, semantic, or hybrid" }, { status: 400 });
     }
+
+    if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+      return NextResponse.json({ error: "Invalid limit. Must be between 1 and 100" }, { status: 400 });
+    }
+    const limit = parsedLimit;
 
     const postgresModule = await import("postgres");
     const client = postgresModule.default(process.env.DATABASE_URL!);
@@ -72,6 +77,8 @@ export async function GET(request: NextRequest) {
           LIMIT ${limit}
         `;
       } else if (mode === "semantic") {
+        // Set threshold so the % operator uses the GIN trigram index
+        await client`SET pg_trgm.similarity_threshold = 0.1`;
         rows = await client`
           SELECT
             id,
@@ -83,12 +90,14 @@ export async function GET(request: NextRequest) {
             similarity(prompt_text, ${query}) as score
           FROM prompts
           WHERE user_id = ${session.userId}
-            AND similarity(prompt_text, ${query}) > 0.1
+            AND prompt_text % ${query}
           ORDER BY similarity(prompt_text, ${query}) DESC
           LIMIT ${limit}
         `;
       } else {
         // hybrid mode: combine keyword and trigram scores
+        // Set threshold so the % operator uses the GIN trigram index
+        await client`SET pg_trgm.similarity_threshold = 0.1`;
         rows = await client`
           SELECT
             id,
@@ -98,14 +107,14 @@ export async function GET(request: NextRequest) {
             source,
             session_id,
             (
-              0.4 * COALESCE(ts_rank(search_vector, websearch_to_tsquery('english', ${query})), 0) +
+              0.4 * (ts_rank(search_vector, websearch_to_tsquery('english', ${query})) / (1.0 + ts_rank(search_vector, websearch_to_tsquery('english', ${query})))) +
               0.6 * COALESCE(similarity(prompt_text, ${query}), 0)
             ) as score
           FROM prompts
           WHERE user_id = ${session.userId}
             AND (
               search_vector @@ websearch_to_tsquery('english', ${query})
-              OR similarity(prompt_text, ${query}) > 0.1
+              OR prompt_text % ${query}
             )
           ORDER BY score DESC
           LIMIT ${limit}

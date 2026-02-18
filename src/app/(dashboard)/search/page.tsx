@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleSearch = useCallback(
     async (e?: React.FormEvent) => {
@@ -71,9 +72,18 @@ export default function SearchPage() {
       const trimmed = query.trim();
       if (!trimmed) return;
 
+      // Abort any in-flight request to prevent stale results
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       setLoading(true);
       setError(null);
       setSearched(true);
+      setResults([]);
+      setTotalResults(0);
 
       try {
         const params = new URLSearchParams({
@@ -81,7 +91,9 @@ export default function SearchPage() {
           mode,
           limit: "30",
         });
-        const res = await fetch(`/api/search?${params.toString()}`);
+        const res = await fetch(`/api/search?${params.toString()}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) {
           const data = await res.json();
           throw new Error(data.error || "Search failed");
@@ -90,11 +102,14 @@ export default function SearchPage() {
         setResults(data.results);
         setTotalResults(data.totalResults);
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Search failed");
         setResults([]);
         setTotalResults(0);
       } finally {
-        setLoading(false);
+        if (abortControllerRef.current === controller) {
+          setLoading(false);
+        }
       }
     },
     [query, mode]

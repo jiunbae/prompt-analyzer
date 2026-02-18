@@ -286,7 +286,13 @@ export function SessionFilters({
                 type="button"
                 onClick={() => {
                   setSearch("");
-                  handleFilterChange("search", undefined);
+                  startTransition(() => {
+                    router.push(
+                      pathname +
+                        "?" +
+                        createQueryString({ search: undefined, searchMode: undefined })
+                    );
+                  });
                 }}
                 className="hover:text-indigo-100"
               >
