@@ -23,6 +23,11 @@ interface TimelineDay {
   sessions: TimelineSession[];
 }
 
+interface CalendarDay {
+  date: string;
+  count: number;
+}
+
 interface PaginationInfo {
   total: number;
   limit: number;
@@ -42,9 +47,11 @@ export default function TimelinePage() {
   const searchParams = useSearchParams();
 
   const [data, setData] = useState<TimelineData | null>(null);
+  const [calendarData, setCalendarData] = useState<CalendarDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const calendarAbortRef = useRef<AbortController | null>(null);
 
   const selectedDate = searchParams.get("date") || null;
   const projectFilter = searchParams.get("project") || null;
@@ -125,12 +132,54 @@ export default function TimelinePage() {
     }
   }, [fromParam, toParam, projectFilter, sourceFilter, data]);
 
+  /** Fetch full-range calendar summary (not paginated). */
+  const fetchCalendar = useCallback(async () => {
+    if (calendarAbortRef.current) {
+      calendarAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    calendarAbortRef.current = controller;
+
+    const params = new URLSearchParams();
+    if (fromParam) {
+      params.set("from", fromParam);
+    } else {
+      const yearAgo = new Date();
+      yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+      params.set("from", yearAgo.toISOString().slice(0, 10));
+    }
+    if (toParam) {
+      params.set("to", toParam);
+    } else {
+      params.set("to", new Date().toISOString().slice(0, 10));
+    }
+    if (projectFilter) params.set("project", projectFilter);
+    if (sourceFilter) params.set("source", sourceFilter);
+
+    try {
+      const res = await fetch(`/api/sessions/timeline/calendar?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!controller.signal.aborted) {
+        setCalendarData(json.days ?? []);
+      }
+    } catch {
+      // Silently ignore calendar fetch errors (timeline still works)
+    }
+  }, [fromParam, toParam, projectFilter, sourceFilter]);
+
   useEffect(() => {
     fetchData();
+    fetchCalendar();
     return () => {
       // Cleanup: abort on unmount or dependency change
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+      }
+      if (calendarAbortRef.current) {
+        calendarAbortRef.current.abort();
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,10 +208,8 @@ export default function TimelinePage() {
     [router, searchParams]
   );
 
-  // Build calendar data from timeline days
-  const calendarData = data
-    ? buildCalendarData(data.days, fromParam, toParam)
-    : [];
+  // Build full-range calendar data from the dedicated calendar endpoint
+  const calendarDisplayData = buildCalendarDisplayData(calendarData, fromParam, toParam);
 
   // Filter timeline days if a date is selected
   const timelineDays = data
@@ -183,9 +230,7 @@ export default function TimelinePage() {
     }
   }
 
-  const totalSessions = data
-    ? data.days.reduce((sum, d) => sum + d.sessions.length, 0)
-    : 0;
+  const totalSessions = calendarData.reduce((sum, d) => sum + d.count, 0);
 
   return (
     <div className="space-y-6">
@@ -325,7 +370,7 @@ export default function TimelinePage() {
             <CardContent>
               <div className="overflow-x-auto">
                 <SessionCalendar
-                  data={calendarData}
+                  data={calendarDisplayData}
                   selectedDate={selectedDate}
                   onSelectDate={(date) => updateParams({ date })}
                 />
@@ -363,14 +408,14 @@ export default function TimelinePage() {
                 <SessionTimeline days={timelineDays} />
               </div>
               {/* Load more button for pagination */}
-              {data?.pagination?.hasMore && !selectedDate && (
+              {data?.pagination?.hasMore && (
                 <div className="flex justify-center mt-4">
                   <button
                     type="button"
                     onClick={loadMore}
                     className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-secondary/50 transition-colors"
                   >
-                    Load more sessions ({data.pagination.total - data.pagination.offset - data.pagination.limit} remaining)
+                    Load more sessions ({Math.max(0, data.pagination.total - data.pagination.offset - data.pagination.limit)} remaining)
                   </button>
                 </div>
               )}
@@ -383,10 +428,11 @@ export default function TimelinePage() {
 }
 
 /**
- * Build calendar data from timeline days, filling in zeros for days without sessions.
+ * Build calendar display data from the dedicated calendar endpoint response,
+ * filling in zeros for days without sessions across the full date range.
  */
-function buildCalendarData(
-  days: TimelineDay[],
+function buildCalendarDisplayData(
+  days: CalendarDay[],
   fromParam: string | null,
   toParam: string | null
 ): Array<{ date: string; sessionCount: number }> {
@@ -397,10 +443,10 @@ function buildCalendarData(
   const from = fromParam ? new Date(fromParam) : yearAgo;
   const to = toParam ? new Date(toParam) : now;
 
-  // Build a map of date -> session count
+  // Build a map of date -> session count from the calendar endpoint
   const countMap = new Map<string, number>();
   for (const day of days) {
-    countMap.set(day.date, day.sessions.length);
+    countMap.set(day.date, day.count);
   }
 
   // Fill all days in range
