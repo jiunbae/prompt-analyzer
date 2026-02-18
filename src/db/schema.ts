@@ -102,6 +102,9 @@ export const prompts = pgTable(
     index("idx_prompts_user").on(table.userId),
     index("idx_prompts_session_id").on(table.sessionId),
     index("idx_prompts_search_vector").using("gin", table.searchVector),
+    index("idx_prompts_user_timestamp").on(table.userId, table.timestamp),
+    index("idx_prompts_device").on(table.deviceName),
+    index("idx_prompts_user_project").on(table.userId, table.projectName),
   ]
 );
 
@@ -158,14 +161,19 @@ export const aiInsights = pgTable(
 
 // Daily aggregations table
 export const analyticsDaily = pgTable("analytics_daily", {
-  date: date("date").primaryKey(),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id),
+  date: date("date").notNull(),
   promptCount: integer("prompt_count").default(0),
   totalChars: integer("total_chars").default(0),
   totalTokensEst: integer("total_tokens_est").default(0),
+  totalResponseTokens: integer("total_response_tokens").default(0),
   uniqueProjects: integer("unique_projects").default(0),
   avgPromptLength: numeric("avg_prompt_length", { precision: 10, scale: 2 }).default("0"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => [
+  index("idx_analytics_daily_user_date").on(table.userId, table.date),
+]);
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
