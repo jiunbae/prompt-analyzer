@@ -165,6 +165,56 @@ export const aiInsights = pgTable(
   ]
 );
 
+// Prompt templates table
+export const promptTemplates = pgTable(
+  "prompt_templates",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    template: text("template").notNull(), // Template text with {{placeholders}}
+    variables: jsonb("variables").default([]), // [{name, default, description}]
+    category: varchar("category", { length: 100 }),
+    usageCount: integer("usage_count").default(0),
+    isPublic: boolean("is_public").default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_templates_user").on(table.userId),
+    index("idx_templates_category").on(table.category),
+  ]
+);
+
+// Shared prompts table
+export const sharedPrompts = pgTable(
+  "shared_prompts",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    promptId: uuid("prompt_id")
+      .notNull()
+      .references(() => prompts.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    shareToken: varchar("share_token", { length: 64 }).notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    viewCount: integer("view_count").default(0),
+    isActive: boolean("is_active").default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_shared_token").on(table.shareToken),
+  ]
+);
+
 // Daily aggregations table
 export const analyticsDaily = pgTable("analytics_daily", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -185,6 +235,8 @@ export const analyticsDaily = pgTable("analytics_daily", {
 export const usersRelations = relations(users, ({ many }) => ({
   prompts: many(prompts),
   allowedEmails: many(allowedEmails),
+  promptTemplates: many(promptTemplates),
+  sharedPrompts: many(sharedPrompts),
 }));
 
 export const allowedEmailsRelations = relations(allowedEmails, ({ one }) => ({
@@ -196,6 +248,7 @@ export const allowedEmailsRelations = relations(allowedEmails, ({ one }) => ({
 
 export const promptsRelations = relations(prompts, ({ one, many }) => ({
   promptTags: many(promptTags),
+  sharedPrompts: many(sharedPrompts),
   user: one(users, {
     fields: [prompts.userId],
     references: [users.id],
@@ -265,6 +318,24 @@ export const webhookLogsRelations = relations(webhookLogs, ({ one }) => ({
   }),
 }));
 
+export const promptTemplatesRelations = relations(promptTemplates, ({ one }) => ({
+  user: one(users, {
+    fields: [promptTemplates.userId],
+    references: [users.id],
+  }),
+}));
+
+export const sharedPromptsRelations = relations(sharedPrompts, ({ one }) => ({
+  prompt: one(prompts, {
+    fields: [sharedPrompts.promptId],
+    references: [prompts.id],
+  }),
+  user: one(users, {
+    fields: [sharedPrompts.userId],
+    references: [users.id],
+  }),
+}));
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -281,3 +352,7 @@ export type NewAiInsight = typeof aiInsights.$inferInsert;
 export type Webhook = typeof webhooks.$inferSelect;
 export type NewWebhook = typeof webhooks.$inferInsert;
 export type WebhookLog = typeof webhookLogs.$inferSelect;
+export type PromptTemplate = typeof promptTemplates.$inferSelect;
+export type NewPromptTemplate = typeof promptTemplates.$inferInsert;
+export type SharedPrompt = typeof sharedPrompts.$inferSelect;
+export type NewSharedPrompt = typeof sharedPrompts.$inferInsert;
