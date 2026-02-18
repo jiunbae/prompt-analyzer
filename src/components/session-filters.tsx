@@ -10,12 +10,21 @@ interface FilterOption {
   count: number;
 }
 
+type SearchMode = "keyword" | "semantic" | "hybrid";
+
+const searchModeLabels: Record<SearchMode, string> = {
+  keyword: "Keyword",
+  semantic: "Semantic",
+  hybrid: "Hybrid",
+};
+
 interface SessionFiltersProps {
   projects: FilterOption[];
   sources: FilterOption[];
   devices?: FilterOption[];
   workspaces?: FilterOption[];
   currentSearch?: string;
+  currentSearchMode?: string;
   currentProject?: string;
   currentSource?: string;
   currentDevice?: string;
@@ -30,6 +39,7 @@ export function SessionFilters({
   devices = [],
   workspaces = [],
   currentSearch,
+  currentSearchMode,
   currentProject,
   currentSource,
   currentDevice,
@@ -43,6 +53,9 @@ export function SessionFilters({
   const [isPending, startTransition] = useTransition();
 
   const [search, setSearch] = useState(currentSearch ?? "");
+  const [searchMode, setSearchMode] = useState<SearchMode>(
+    (currentSearchMode as SearchMode) || "keyword"
+  );
   const [showAdvanced, setShowAdvanced] = useState(
     !!(currentProject || currentSource || currentDevice || currentWorkspace || currentFrom || currentTo)
   );
@@ -68,7 +81,14 @@ export function SessionFilters({
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     startTransition(() => {
-      router.push(pathname + "?" + createQueryString({ search: search || undefined }));
+      router.push(
+        pathname +
+          "?" +
+          createQueryString({
+            search: search || undefined,
+            searchMode: search ? searchMode : undefined,
+          })
+      );
     });
   };
 
@@ -85,52 +105,74 @@ export function SessionFilters({
     });
   };
 
-  const hasFilters = currentSearch || currentProject || currentSource || currentDevice || currentWorkspace || currentFrom || currentTo;
+  const hasFilters = currentSearch || currentProject || currentSource || currentDevice || currentWorkspace || currentFrom || currentTo || (currentSearchMode && currentSearchMode !== "keyword");
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <div className="relative flex-1">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      <form onSubmit={handleSearch} className="space-y-2">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <Input
+              type="search"
+              placeholder="Search sessions..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
             />
-          </svg>
-          <Input
-            type="search"
-            placeholder="Search sessions..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "..." : "Search"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className=""
-        >
-          <svg
-            className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+          </div>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? "..." : "Search"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className=""
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-          <span className="ml-2">Filters</span>
-        </Button>
+            <svg
+              className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+            <span className="ml-2">Filters</span>
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground font-medium">Search mode:</span>
+          <div className="inline-flex rounded-lg border border-border overflow-hidden">
+            {(["keyword", "semantic", "hybrid"] as SearchMode[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setSearchMode(m)}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                  searchMode === m
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                {searchModeLabels[m]}
+              </button>
+            ))}
+          </div>
+        </div>
       </form>
 
       {showAdvanced && (
@@ -237,11 +279,20 @@ export function SessionFilters({
           {currentSearch && (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs">
               Search: &quot;{currentSearch}&quot;
+              {currentSearchMode && currentSearchMode !== "keyword" && (
+                <span className="opacity-70">({searchModeLabels[currentSearchMode as SearchMode] || currentSearchMode})</span>
+              )}
               <button
                 type="button"
                 onClick={() => {
                   setSearch("");
-                  handleFilterChange("search", undefined);
+                  startTransition(() => {
+                    router.push(
+                      pathname +
+                        "?" +
+                        createQueryString({ search: undefined, searchMode: undefined })
+                    );
+                  });
                 }}
                 className="hover:text-indigo-100"
               >

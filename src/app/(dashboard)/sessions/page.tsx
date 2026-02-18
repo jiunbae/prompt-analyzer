@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 interface SearchParams {
   page?: string;
   search?: string;
+  searchMode?: string;
   project?: string;
   source?: string;
   device?: string;
@@ -69,9 +70,20 @@ async function getSessions(params: SearchParams, userId: string) {
     conditions.push(lte(schema.prompts.timestamp, toDate));
   }
   if (params.search) {
-    conditions.push(
-      sql`${schema.prompts.searchVector} @@ websearch_to_tsquery('english', ${params.search})`
-    );
+    const searchMode = params.searchMode || "keyword";
+    if (searchMode === "semantic") {
+      conditions.push(
+        sql`${schema.prompts.promptText} % ${params.search} AND similarity(${schema.prompts.promptText}, ${params.search}) > 0.1`
+      );
+    } else if (searchMode === "hybrid") {
+      conditions.push(
+        sql`(${schema.prompts.searchVector} @@ websearch_to_tsquery('english', ${params.search}) OR (${schema.prompts.promptText} % ${params.search} AND similarity(${schema.prompts.promptText}, ${params.search}) > 0.1))`
+      );
+    } else {
+      conditions.push(
+        sql`${schema.prompts.searchVector} @@ websearch_to_tsquery('english', ${params.search})`
+      );
+    }
   }
 
   const whereClause = and(...conditions);
@@ -173,6 +185,7 @@ export default async function SessionsPage({
     const p = new URLSearchParams();
     if (page > 1) p.set("page", String(page));
     if (params.search) p.set("search", params.search);
+    if (params.searchMode) p.set("searchMode", params.searchMode);
     if (params.project) p.set("project", params.project);
     if (params.source) p.set("source", params.source);
     if (params.device) p.set("device", params.device);
@@ -198,6 +211,7 @@ export default async function SessionsPage({
         devices={devices}
         workspaces={workspaces}
         currentSearch={params.search}
+        currentSearchMode={params.searchMode}
         currentProject={params.project}
         currentSource={params.source}
         currentDevice={params.device}
