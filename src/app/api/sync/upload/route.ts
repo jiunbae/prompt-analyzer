@@ -3,6 +3,7 @@ import { z } from "zod";
 import { findUserByToken } from "@/services/sync";
 import { processUpload } from "@/services/upload";
 import type { UploadRecord } from "@/services/upload";
+import { dispatchWebhook } from "@/services/webhook";
 import { logger } from "@/lib/logger";
 import { env } from "@/env";
 import { scorePrompt } from "@/services/quality-scorer";
@@ -223,6 +224,11 @@ export async function POST(request: NextRequest) {
           "Failed to score uploaded prompts",
         );
       }
+
+      // Fire webhook notification (non-blocking)
+      dispatchWebhook(user.id, "prompt.created", { count: result.accepted }).catch((err) => {
+        logger.error({ error: err, userId: user.id }, "Non-blocking webhook dispatch failed");
+      });
     }
 
     return NextResponse.json(result, {

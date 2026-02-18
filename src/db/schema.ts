@@ -217,6 +217,54 @@ export const promptTagsRelations = relations(promptTags, ({ one }) => ({
   }),
 }));
 
+// Webhooks table
+export const webhooks = pgTable("webhooks", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  url: varchar("url", { length: 2048 }).notNull(),
+  secret: varchar("secret", { length: 255 }),  // HMAC signing secret
+  events: text("events").array().notNull().default(sql`ARRAY['prompt.created']`),
+  // Events: prompt.created, prompt.scored, session.started, session.ended, sync.completed
+  isActive: boolean("is_active").default(true),
+  lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
+  lastStatus: integer("last_status"),  // Last HTTP status code
+  failCount: integer("fail_count").default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_webhooks_user").on(table.userId),
+]);
+
+// Webhook delivery logs table
+export const webhookLogs = pgTable("webhook_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  webhookId: uuid("webhook_id").notNull().references(() => webhooks.id, { onDelete: "cascade" }),
+  event: varchar("event", { length: 100 }).notNull(),
+  payload: jsonb("payload"),
+  statusCode: integer("status_code"),
+  responseBody: text("response_body"),
+  duration: integer("duration"),  // ms
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_webhook_logs_webhook_created").on(table.webhookId, table.createdAt),
+]);
+
+// Webhook relations
+export const webhooksRelations = relations(webhooks, ({ one, many }) => ({
+  user: one(users, {
+    fields: [webhooks.userId],
+    references: [users.id],
+  }),
+  logs: many(webhookLogs),
+}));
+
+export const webhookLogsRelations = relations(webhookLogs, ({ one }) => ({
+  webhook: one(webhooks, {
+    fields: [webhookLogs.webhookId],
+    references: [webhooks.id],
+  }),
+}));
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -230,3 +278,6 @@ export type PromptTag = typeof promptTags.$inferSelect;
 export type AnalyticsDaily = typeof analyticsDaily.$inferSelect;
 export type AiInsight = typeof aiInsights.$inferSelect;
 export type NewAiInsight = typeof aiInsights.$inferInsert;
+export type Webhook = typeof webhooks.$inferSelect;
+export type NewWebhook = typeof webhooks.$inferInsert;
+export type WebhookLog = typeof webhookLogs.$inferSelect;
