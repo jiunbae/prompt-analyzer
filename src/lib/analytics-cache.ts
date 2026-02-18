@@ -35,28 +35,28 @@ export async function refreshDailyAggregations(
         return d;
       })();
 
-    // Aggregate per-day stats from prompts for this user
-    const dailyRows = await db
-      .select({
-        date: sql<string>`date(${schema.prompts.timestamp})`,
-        promptCount: sql<number>`count(*)::int`,
-        totalChars: sql<number>`coalesce(sum(${schema.prompts.promptLength}), 0)::int`,
-        totalTokensEst: sql<number>`coalesce(sum(${schema.prompts.tokenEstimate}), 0)::int`,
-        totalResponseTokens: sql<number>`coalesce(sum(${schema.prompts.tokenEstimateResponse}), 0)::int`,
-        uniqueProjects: sql<number>`count(distinct ${schema.prompts.projectName})::int`,
-        avgPromptLength: sql<string>`coalesce(avg(${schema.prompts.promptLength}), 0)::numeric(10,2)`,
-      })
-      .from(schema.prompts)
-      .where(
-        and(
-          eq(schema.prompts.userId, userId),
-          gte(schema.prompts.timestamp, rangeFrom),
-        ),
-      )
-      .groupBy(sql`date(${schema.prompts.timestamp})`);
-
-    // Upsert all days in a single transaction for consistency
+    // Aggregate and upsert in a single transaction for consistency
     await db.transaction(async (tx: typeof db) => {
+      // Aggregate per-day stats from prompts for this user
+      const dailyRows = await tx
+        .select({
+          date: sql<string>`date(${schema.prompts.timestamp})`,
+          promptCount: sql<number>`count(*)::int`,
+          totalChars: sql<number>`coalesce(sum(${schema.prompts.promptLength} + coalesce(${schema.prompts.responseLength}, 0)), 0)::int`,
+          totalTokensEst: sql<number>`coalesce(sum(${schema.prompts.tokenEstimate} + coalesce(${schema.prompts.tokenEstimateResponse}, 0)), 0)::int`,
+          totalResponseTokens: sql<number>`coalesce(sum(${schema.prompts.tokenEstimateResponse}), 0)::int`,
+          uniqueProjects: sql<number>`count(distinct ${schema.prompts.projectName})::int`,
+          avgPromptLength: sql<string>`coalesce(avg(${schema.prompts.promptLength}), 0)::numeric(10,2)`,
+        })
+        .from(schema.prompts)
+        .where(
+          and(
+            eq(schema.prompts.userId, userId),
+            gte(schema.prompts.timestamp, rangeFrom),
+          ),
+        )
+        .groupBy(sql`date(${schema.prompts.timestamp})`);
+
       for (const row of dailyRows) {
         await tx.execute(sql`
           INSERT INTO analytics_daily (id, user_id, date, prompt_count, total_chars, total_tokens_est, total_response_tokens, unique_projects, avg_prompt_length, updated_at)
