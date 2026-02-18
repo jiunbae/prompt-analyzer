@@ -4,8 +4,9 @@ import postgres from "postgres";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import Link from "next/link";
 
 // Force dynamic rendering - don't pre-render at build time
 export const dynamic = "force-dynamic";
@@ -47,6 +48,42 @@ async function getPrompt(id: string, userId: string | null) {
   await client.end();
 
   return result[0] ?? null;
+}
+
+interface SimilarPrompt {
+  id: string;
+  timestamp: string;
+  projectName: string | null;
+  similarity: number;
+  firstLine: string;
+}
+
+async function getSimilarPrompts(id: string): Promise<SimilarPrompt[]> {
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
+  const protocol = headerStore.get("x-forwarded-proto") ?? "http";
+  const baseUrl = host ? `${protocol}://${host}` : process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!baseUrl) {
+    return [];
+  }
+
+  const cookieHeader = (await cookies()).toString();
+  const response = await fetch(
+    `${baseUrl}/api/prompts/similar?id=${encodeURIComponent(id)}&limit=5`,
+    {
+      method: "GET",
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const payload = (await response.json()) as { prompts?: SimilarPrompt[] };
+  return Array.isArray(payload.prompts) ? payload.prompts : [];
 }
 
 interface PromptDetailPageProps {
@@ -104,18 +141,62 @@ export default async function PromptDetailPage({ params }: PromptDetailPageProps
     });
   }
 
+  const similarPrompts = await getSimilarPrompts(prompt.id);
+
   return (
-    <PromptDetail
-      id={prompt.id}
-      sessionId={prompt.sessionId ?? undefined}
-      timestamp={prompt.timestamp}
-      projectName={prompt.projectName}
-      workingDirectory={prompt.workingDirectory}
-      messages={messages}
-      inputTokens={prompt.tokenEstimate ?? Math.ceil(prompt.promptLength / 4)}
-      outputTokens={prompt.tokenEstimateResponse ?? 0}
-      promptType={prompt.promptType}
-      tags={tags}
-    />
+    <div className="space-y-8">
+      <PromptDetail
+        id={prompt.id}
+        sessionId={prompt.sessionId ?? undefined}
+        timestamp={prompt.timestamp}
+        projectName={prompt.projectName}
+        workingDirectory={prompt.workingDirectory}
+        messages={messages}
+        inputTokens={prompt.tokenEstimate ?? Math.ceil(prompt.promptLength / 4)}
+        outputTokens={prompt.tokenEstimateResponse ?? 0}
+        promptType={prompt.promptType}
+        tags={tags}
+      />
+
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="border-b border-border px-6 py-4">
+          <h2 className="text-lg font-semibold text-foreground">Similar Prompts</h2>
+          <p className="text-sm text-muted-foreground">
+            Find related prompts and compare their wording.
+          </p>
+        </div>
+
+        {similarPrompts.length === 0 ? (
+          <div className="px-6 py-5 text-sm text-muted-foreground">
+            No similar prompts found for this prompt yet.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {similarPrompts.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {item.firstLine || "Untitled prompt"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {Math.round(item.similarity * 100)}% similar
+                  </p>
+                </div>
+
+                <Link
+                  href={`/compare?a=${prompt.id}&b=${item.id}`}
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                >
+                  Compare
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
