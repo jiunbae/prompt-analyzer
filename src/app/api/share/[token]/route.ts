@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
-
-function getDb() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("DATABASE_URL not configured");
-  const client = postgres(connectionString);
-  return { db: drizzle(client, { schema }), client };
-}
 
 // GET /api/share/[token] - Public endpoint, no auth required
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { db, client } = getDb();
   try {
     const { token } = await params;
 
@@ -90,7 +81,5 @@ export async function GET(
       { error: "Failed to fetch shared prompt" },
       { status: 500 }
     );
-  } finally {
-    await client.end();
   }
 }

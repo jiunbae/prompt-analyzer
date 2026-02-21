@@ -1,19 +1,9 @@
 import type { ProcessorInput, InsightResult } from "../types";
 import { getLLMConfig, callLLM } from "../llm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { sql, eq, and } from "drizzle-orm";
 import { scorePrompt } from "@/services/quality-scorer";
-
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-function getDb() {
-  if (!db) {
-    const client = postgres(process.env.DATABASE_URL!);
-    db = drizzle(client, { schema });
-  }
-  return db;
-}
 
 const VALID_TOPICS = [
   "debugging",
@@ -159,7 +149,6 @@ function parseLLMResponse(
 // ── Main handler ─────────────────────────────────────────────────
 
 export async function handler(input: ProcessorInput): Promise<InsightResult> {
-  const db = getDb();
 
   // Fetch unenriched prompts OR prompts missing dimension scores (backfill)
     const unenriched = await db
@@ -181,7 +170,7 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
 
     if (unenriched.length === 0) {
       // Get existing stats to report
-      const existingStats = await getQualityStats(db, input.userId);
+      const existingStats = await getQualityStats(input.userId);
       return {
         title: "Prompt Quality Enrichment",
         summary: `All prompts are already enriched. ${existingStats.totalEnriched} prompts scored with average quality ${existingStats.averageScore}.`,
@@ -412,7 +401,6 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
 // ── Helper to get aggregate stats ────────────────────────────────
 
 async function getQualityStats(
-  db: ReturnType<typeof drizzle<typeof schema>>,
   userId: string,
 ): Promise<{ totalEnriched: number; averageScore: number }> {
   const [row] = await db

@@ -1,27 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, findUserById, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { findUserById } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-    if (!sessionToken) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
-    }
-
-    // Parse session token
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json(
-        { error: "Invalid session" },
-        { status: 401 }
-      );
-    }
+    const session = await requireAuth();
 
     // Fetch fresh user data from database
     const user = await findUserById(session.userId);
@@ -42,6 +25,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Auth check error:", error);
     return NextResponse.json(
       { error: "An error occurred checking authentication" },

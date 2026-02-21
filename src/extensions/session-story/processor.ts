@@ -1,18 +1,8 @@
 import type { ProcessorInput, InsightResult, InsightHighlight } from "../types";
 import { callLLM, getLLMConfig } from "../llm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
-
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-function getDb() {
-  if (!db) {
-    const client = postgres(process.env.DATABASE_URL!);
-    db = drizzle(client, { schema });
-  }
-  return db;
-}
 
 interface SessionPrompt {
   index: number;
@@ -40,7 +30,7 @@ async function getSessionPrompts(
   userId: string,
   sessionId: string,
 ): Promise<typeof schema.prompts.$inferSelect[]> {
-  const database = getDb();
+  const database = db;
 
   const prompts = await database
     .select()
@@ -58,7 +48,7 @@ async function getSessionPrompts(
 }
 
 async function getRecentSessionId(userId: string): Promise<string | null> {
-  const database = getDb();
+  const database = db;
 
   const [row] = await database
     .select({ sessionId: schema.prompts.sessionId })

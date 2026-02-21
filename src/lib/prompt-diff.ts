@@ -1,12 +1,14 @@
 /**
  * Prompt diff utilities
  *
- * Word-level diff using Longest Common Subsequence (LCS) algorithm
+ * Word-level diff using a space-optimized LCS approach (Hirschberg-style)
  * and Jaccard similarity on word sets. No external dependencies.
+ *
+ * Memory: O(min(m, n)) instead of O(m * n).
  */
 
 /** Maximum number of tokens per side before truncation */
-const MAX_TOKENS = 5000;
+const MAX_TOKENS = 2000;
 
 export interface DiffSegment {
   type: "added" | "removed" | "unchanged";
@@ -25,57 +27,88 @@ function tokenize(text: string): string[] {
 }
 
 /**
- * Compute the LCS (Longest Common Subsequence) table for two arrays of words.
- * Returns the DP table for backtracking.
+ * Compute the last row of the LCS length table using O(n) space.
+ * This is the forward pass of the Hirschberg algorithm.
  */
-function lcsTable(a: string[], b: string[]): number[][] {
-  const m = a.length;
+function lcsLengths(a: string[], b: string[]): Uint32Array {
   const n = b.length;
-  // Use typed arrays for better performance on large inputs
-  const dp: number[][] = Array.from({ length: m + 1 }, () =>
-    new Array(n + 1).fill(0)
-  );
+  const prev = new Uint32Array(n + 1);
+  const curr = new Uint32Array(n + 1);
 
-  for (let i = 1; i <= m; i++) {
+  for (let i = 0; i < a.length; i++) {
     for (let j = 1; j <= n; j++) {
-      if (a[i - 1] === b[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1;
+      if (a[i] === b[j - 1]) {
+        curr[j] = prev[j - 1] + 1;
       } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        curr[j] = Math.max(curr[j - 1], prev[j]);
       }
     }
+    prev.set(curr);
+    curr.fill(0);
   }
-  return dp;
+
+  return prev;
 }
 
 /**
- * Backtrack through the LCS table to produce diff segments.
+ * Hirschberg's algorithm: divide-and-conquer LCS diff with O(min(m,n)) space.
+ * Produces the same output as the full DP table approach.
  */
-function backtrack(
-  dp: number[][],
-  a: string[],
-  b: string[],
-  i: number,
-  j: number
-): DiffSegment[] {
-  const segments: DiffSegment[] = [];
+function hirschbergDiff(a: string[], b: string[]): DiffSegment[] {
+  const m = a.length;
+  const n = b.length;
 
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
-      segments.push({ type: "unchanged", text: a[i - 1] });
-      i--;
-      j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      segments.push({ type: "added", text: b[j - 1] });
-      j--;
-    } else {
-      segments.push({ type: "removed", text: a[i - 1] });
-      i--;
+  // Base cases
+  if (m === 0) {
+    return b.map((w) => ({ type: "added" as const, text: w }));
+  }
+  if (n === 0) {
+    return a.map((w) => ({ type: "removed" as const, text: w }));
+  }
+  if (m === 1) {
+    const idx = b.indexOf(a[0]);
+    if (idx === -1) {
+      return [
+        ...a.map((w) => ({ type: "removed" as const, text: w })),
+        ...b.map((w) => ({ type: "added" as const, text: w })),
+      ];
+    }
+    const result: DiffSegment[] = [];
+    for (let j = 0; j < idx; j++) result.push({ type: "added", text: b[j] });
+    result.push({ type: "unchanged", text: a[0] });
+    for (let j = idx + 1; j < n; j++) result.push({ type: "added", text: b[j] });
+    return result;
+  }
+
+  // Divide: split a in half
+  const mid = Math.floor(m / 2);
+  const aTop = a.slice(0, mid);
+  const aBot = a.slice(mid);
+
+  // Forward pass on top half
+  const topRow = lcsLengths(aTop, b);
+
+  // Reverse pass on bottom half
+  const aBotRev = aBot.slice().reverse();
+  const bRev = b.slice().reverse();
+  const botRow = lcsLengths(aBotRev, bRev);
+
+  // Find optimal split point in b
+  let bestJ = 0;
+  let bestScore = 0;
+  for (let j = 0; j <= n; j++) {
+    const score = topRow[j] + botRow[n - j];
+    if (score > bestScore) {
+      bestScore = score;
+      bestJ = j;
     }
   }
 
-  segments.reverse();
-  return segments;
+  // Conquer: recurse on both halves
+  const left = hirschbergDiff(aTop, b.slice(0, bestJ));
+  const right = hirschbergDiff(aBot, b.slice(bestJ));
+
+  return left.concat(right);
 }
 
 /**
@@ -100,7 +133,7 @@ function mergeSegments(segments: DiffSegment[]): DiffSegment[] {
 }
 
 /**
- * Compute word-level diff between two texts using LCS.
+ * Compute word-level diff between two texts using Hirschberg's algorithm.
  *
  * Inputs exceeding MAX_TOKENS tokens per side are truncated and a
  * warning segment is appended so the caller knows the diff is partial.
@@ -132,8 +165,7 @@ export function computeDiff(textA: string, textB: string): DiffSegment[] {
     return [{ type: "removed", text: wordsA.join("") }];
   }
 
-  const dp = lcsTable(wordsA, wordsB);
-  const segments = backtrack(dp, wordsA, wordsB, wordsA.length, wordsB.length);
+  const segments = hirschbergDiff(wordsA, wordsB);
   const merged = mergeSegments(segments);
 
   if (wasTruncated) {

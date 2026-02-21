@@ -1,43 +1,18 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { sql, eq, and } from "drizzle-orm";
+import { requireAuth, AuthError } from "@/lib/with-auth";
 import { handler as enrichHandler } from "@/extensions/prompt-quality/processor";
-
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-function getDb() {
-  if (!db) {
-    const client = postgres(process.env.DATABASE_URL!);
-    db = drizzle(client, { schema });
-  }
-  return db;
-}
-
-async function getSessionUserId(): Promise<string | null> {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!sessionToken) return null;
-  const session = parseSessionToken(sessionToken);
-  if (!session) return null;
-  return session.userId;
-}
 
 /**
  * GET /api/insights/quality
  * Returns quality stats for the authenticated user.
  */
 export async function GET() {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  const db = getDb();
-
   try {
+    const session = await requireAuth();
+
     const [
       overallStats,
       distributionRows,
@@ -56,7 +31,7 @@ export async function GET() {
           totalUnenriched: sql<number>`count(*) filter (where enriched_at is null and prompt_type = 'user_input')`,
         })
         .from(schema.prompts)
-        .where(eq(schema.prompts.userId, userId)),
+        .where(eq(schema.prompts.userId, session.userId)),
 
       // Quality distribution
       db
@@ -74,7 +49,7 @@ export async function GET() {
         .from(schema.prompts)
         .where(
           and(
-            eq(schema.prompts.userId, userId),
+            eq(schema.prompts.userId, session.userId),
             sql`${schema.prompts.enrichedAt} is not null`,
           ),
         )
@@ -91,7 +66,7 @@ export async function GET() {
       db.execute(sql`
         select tag, count(*)::int as count
         from ${schema.prompts}, unnest(topic_tags) as tag
-        where ${schema.prompts.userId} = ${userId}
+        where ${schema.prompts.userId} = ${session.userId}
           and ${schema.prompts.enrichedAt} is not null
         group by tag
         order by count desc
@@ -150,6 +125,9 @@ export async function GET() {
       topTopics,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Quality insights API error:", error);
     return NextResponse.json(
       { error: "Failed to load quality insights" },
@@ -163,18 +141,15 @@ export async function GET() {
  * Triggers batch enrichment for the authenticated user.
  */
 export async function POST() {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
   try {
+    const session = await requireAuth();
+
     const now = new Date();
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const result = await enrichHandler({
-      userId,
+      userId: session.userId,
       dateRange: {
         from: thirtyDaysAgo.toISOString(),
         to: now.toISOString(),
@@ -183,6 +158,9 @@ export async function POST() {
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Quality enrichment trigger error:", error);
     return NextResponse.json(
       { error: "Failed to run enrichment" },

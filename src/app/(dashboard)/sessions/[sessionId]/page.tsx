@@ -1,7 +1,6 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 import { notFound } from "next/navigation";
@@ -54,16 +53,13 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const client = postgres(process.env.DATABASE_URL!);
-  const db = drizzle(client, { schema });
-
   const sessionConditions = user.isAdmin
     ? eq(schema.prompts.sessionId, sessionId)
     : and(eq(schema.prompts.userId, user.userId), eq(schema.prompts.sessionId, sessionId));
 
   const prompts = await db.query.prompts.findMany({
     where: sessionConditions,
-    orderBy: [asc(schema.prompts.timestamp)],
+    orderBy: [desc(schema.prompts.timestamp)],
     with: {
       promptTags: {
         with: {
@@ -72,8 +68,6 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
       },
     },
   });
-
-  await client.end();
 
   if (prompts.length === 0) {
     notFound();

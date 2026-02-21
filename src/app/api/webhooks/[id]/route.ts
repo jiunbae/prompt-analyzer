@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -37,15 +35,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     let body;
     try {
@@ -78,75 +68,71 @@ export async function PUT(
       }
     }
 
-    const client = postgres(process.env.DATABASE_URL!);
-    const db = drizzle(client, { schema });
+    // Build the set object with only provided fields
+    const setValues: Record<string, unknown> = {};
+    if (updates.name !== undefined) setValues.name = updates.name;
+    if (updates.url !== undefined) setValues.url = updates.url;
 
-    try {
-      // Build the set object with only provided fields
-      const setValues: Record<string, unknown> = {};
-      if (updates.name !== undefined) setValues.name = updates.name;
-      if (updates.url !== undefined) setValues.url = updates.url;
-
-      // Secret handling: only update if explicitly provided with a value,
-      // or explicitly cleared via clearSecret flag.
-      // When secret is undefined/empty, preserve existing secret.
-      if (updates.clearSecret === true) {
-        setValues.secret = null;
-      } else if (updates.secret !== undefined && updates.secret !== "") {
-        setValues.secret = updates.secret;
-      }
-      // If secret is undefined or empty string and clearSecret is not true,
-      // we do NOT include it in setValues, preserving the existing secret.
-
-      if (updates.events !== undefined) setValues.events = updates.events;
-      if (updates.isActive !== undefined) {
-        setValues.isActive = updates.isActive;
-        // Reset fail count when re-enabling
-        if (updates.isActive) {
-          setValues.failCount = 0;
-        }
-      }
-
-      if (Object.keys(setValues).length === 0) {
-        return NextResponse.json(
-          { error: "No fields to update" },
-          { status: 400 }
-        );
-      }
-
-      const [webhook] = await db
-        .update(schema.webhooks)
-        .set(setValues)
-        .where(
-          and(
-            eq(schema.webhooks.id, id),
-            eq(schema.webhooks.userId, session.userId)
-          )
-        )
-        .returning({
-          id: schema.webhooks.id,
-          name: schema.webhooks.name,
-          url: schema.webhooks.url,
-          events: schema.webhooks.events,
-          isActive: schema.webhooks.isActive,
-          lastTriggeredAt: schema.webhooks.lastTriggeredAt,
-          lastStatus: schema.webhooks.lastStatus,
-          failCount: schema.webhooks.failCount,
-          createdAt: schema.webhooks.createdAt,
-        });
-
-      if (!webhook) {
-        return NextResponse.json(
-          { error: "Webhook not found" },
-          { status: 404 }
-        );
-      }
-
-      return NextResponse.json({ webhook });
-    } finally {
-      await client.end();
+    // Secret handling: only update if explicitly provided with a value,
+    // or explicitly cleared via clearSecret flag.
+    // When secret is undefined/empty, preserve existing secret.
+    if (updates.clearSecret === true) {
+      setValues.secret = null;
+    } else if (updates.secret !== undefined && updates.secret !== "") {
+      setValues.secret = updates.secret;
     }
+    // If secret is undefined or empty string and clearSecret is not true,
+    // we do NOT include it in setValues, preserving the existing secret.
+
+    if (updates.events !== undefined) setValues.events = updates.events;
+    if (updates.isActive !== undefined) {
+      setValues.isActive = updates.isActive;
+      // Reset fail count when re-enabling
+      if (updates.isActive) {
+        setValues.failCount = 0;
+      }
+    }
+
+    if (Object.keys(setValues).length === 0) {
+      return NextResponse.json(
+        { error: "No fields to update" },
+        { status: 400 }
+      );
+    }
+
+    const [webhook] = await db
+      .update(schema.webhooks)
+      .set(setValues)
+      .where(
+        and(
+          eq(schema.webhooks.id, id),
+          eq(schema.webhooks.userId, session.userId)
+        )
+      )
+      .returning({
+        id: schema.webhooks.id,
+        name: schema.webhooks.name,
+        url: schema.webhooks.url,
+        events: schema.webhooks.events,
+        isActive: schema.webhooks.isActive,
+        lastTriggeredAt: schema.webhooks.lastTriggeredAt,
+        lastStatus: schema.webhooks.lastStatus,
+        failCount: schema.webhooks.failCount,
+        createdAt: schema.webhooks.createdAt,
+      });
+
+    if (!webhook) {
+      return NextResponse.json(
+        { error: "Webhook not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ webhook });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Webhook update error:", error);
     return NextResponse.json(
       { error: "Failed to update webhook" },
@@ -164,42 +150,30 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
-    const client = postgres(process.env.DATABASE_URL!);
-    const db = drizzle(client, { schema });
-
-    try {
-      const [deleted] = await db
-        .delete(schema.webhooks)
-        .where(
-          and(
-            eq(schema.webhooks.id, id),
-            eq(schema.webhooks.userId, session.userId)
-          )
+    const [deleted] = await db
+      .delete(schema.webhooks)
+      .where(
+        and(
+          eq(schema.webhooks.id, id),
+          eq(schema.webhooks.userId, session.userId)
         )
-        .returning({ id: schema.webhooks.id });
+      )
+      .returning({ id: schema.webhooks.id });
 
-      if (!deleted) {
-        return NextResponse.json(
-          { error: "Webhook not found" },
-          { status: 404 }
-        );
-      }
-
-      return NextResponse.json({ success: true });
-    } finally {
-      await client.end();
+    if (!deleted) {
+      return NextResponse.json(
+        { error: "Webhook not found" },
+        { status: 404 }
+      );
     }
+
+    return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Webhook delete error:", error);
     return NextResponse.json(
       { error: "Failed to delete webhook" },

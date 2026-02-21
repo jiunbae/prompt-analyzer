@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -33,41 +31,29 @@ const createWebhookSchema = z.object({
  */
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
-    const client = postgres(process.env.DATABASE_URL!);
-    const db = drizzle(client, { schema });
+    const webhooks = await db
+      .select({
+        id: schema.webhooks.id,
+        name: schema.webhooks.name,
+        url: schema.webhooks.url,
+        events: schema.webhooks.events,
+        isActive: schema.webhooks.isActive,
+        lastTriggeredAt: schema.webhooks.lastTriggeredAt,
+        lastStatus: schema.webhooks.lastStatus,
+        failCount: schema.webhooks.failCount,
+        createdAt: schema.webhooks.createdAt,
+      })
+      .from(schema.webhooks)
+      .where(eq(schema.webhooks.userId, session.userId))
+      .orderBy(schema.webhooks.createdAt);
 
-    try {
-      const webhooks = await db
-        .select({
-          id: schema.webhooks.id,
-          name: schema.webhooks.name,
-          url: schema.webhooks.url,
-          events: schema.webhooks.events,
-          isActive: schema.webhooks.isActive,
-          lastTriggeredAt: schema.webhooks.lastTriggeredAt,
-          lastStatus: schema.webhooks.lastStatus,
-          failCount: schema.webhooks.failCount,
-          createdAt: schema.webhooks.createdAt,
-        })
-        .from(schema.webhooks)
-        .where(eq(schema.webhooks.userId, session.userId))
-        .orderBy(schema.webhooks.createdAt);
-
-      return NextResponse.json({ webhooks });
-    } finally {
-      await client.end();
-    }
+    return NextResponse.json({ webhooks });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Webhooks list error:", error);
     return NextResponse.json(
       { error: "Failed to fetch webhooks" },
@@ -81,15 +67,7 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     let body;
     try {
@@ -120,35 +98,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const client = postgres(process.env.DATABASE_URL!);
-    const db = drizzle(client, { schema });
+    const [webhook] = await db
+      .insert(schema.webhooks)
+      .values({
+        userId: session.userId,
+        name,
+        url,
+        secret: secret || null,
+        events,
+        isActive: true,
+        failCount: 0,
+      })
+      .returning({
+        id: schema.webhooks.id,
+        name: schema.webhooks.name,
+        url: schema.webhooks.url,
+        events: schema.webhooks.events,
+        isActive: schema.webhooks.isActive,
+        createdAt: schema.webhooks.createdAt,
+      });
 
-    try {
-      const [webhook] = await db
-        .insert(schema.webhooks)
-        .values({
-          userId: session.userId,
-          name,
-          url,
-          secret: secret || null,
-          events,
-          isActive: true,
-          failCount: 0,
-        })
-        .returning({
-          id: schema.webhooks.id,
-          name: schema.webhooks.name,
-          url: schema.webhooks.url,
-          events: schema.webhooks.events,
-          isActive: schema.webhooks.isActive,
-          createdAt: schema.webhooks.createdAt,
-        });
-
-      return NextResponse.json({ webhook }, { status: 201 });
-    } finally {
-      await client.end();
-    }
+    return NextResponse.json({ webhook }, { status: 201 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Webhook create error:", error);
     return NextResponse.json(
       { error: "Failed to create webhook" },

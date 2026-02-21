@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import dns from "node:dns";
 import { logger } from "@/lib/logger";
+import { db } from "@/db/client";
+import * as schema from "@/db/schema";
 import net from "net";
 
 const MAX_FAIL_COUNT = 10;
@@ -244,20 +246,6 @@ function signPayload(payload: string, secret: string): string {
 }
 
 /**
- * Get a database connection for webhook operations
- */
-async function getDb() {
-  const postgres = (await import("postgres")).default;
-  const { drizzle } = await import("drizzle-orm/postgres-js");
-  const schema = await import("@/db/schema");
-
-  const client = postgres(process.env.DATABASE_URL!);
-  const db = drizzle(client, { schema });
-
-  return { db, schema, client };
-}
-
-/**
  * Dispatch a webhook event to all active webhooks for a user.
  *
  * Queries active webhooks subscribed to the given event, POSTs the payload
@@ -269,12 +257,10 @@ export async function dispatchWebhook(
   event: string,
   payload: Record<string, unknown>
 ): Promise<void> {
-  const { db, schema, client } = await getDb();
   const { eq, and, sql } = await import("drizzle-orm");
 
-  try {
-    // Find all active webhooks for this user that subscribe to this event
-    const activeWebhooks = await db
+  // Find all active webhooks for this user that subscribe to this event
+  const activeWebhooks = await db
       .select()
       .from(schema.webhooks)
       .where(
@@ -446,9 +432,6 @@ export async function dispatchWebhook(
         }
       })
     );
-  } finally {
-    await client.end();
-  }
 }
 
 /**
@@ -459,11 +442,9 @@ export async function sendTestWebhook(
   webhookId: string,
   userId: string
 ): Promise<{ success: boolean; statusCode: number | null; duration: number; error?: string }> {
-  const { db, schema, client } = await getDb();
   const { eq, and } = await import("drizzle-orm");
 
-  try {
-    const [webhook] = await db
+  const [webhook] = await db
       .select()
       .from(schema.webhooks)
       .where(
@@ -562,7 +543,4 @@ export async function sendTestWebhook(
       duration,
       error: success ? undefined : (responseBody ?? "Request failed"),
     };
-  } finally {
-    await client.end();
-  }
 }

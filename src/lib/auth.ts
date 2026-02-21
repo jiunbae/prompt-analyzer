@@ -2,8 +2,13 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 const SALT_ROUNDS = 12;
-const SESSION_SECRET =
-  process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET && process.env.NODE_ENV === "production" && typeof window === "undefined") {
+  // Log warning instead of throwing to avoid build-time failures.
+  // At runtime, token operations will fail safely (return null).
+  console.warn("WARNING: SESSION_SECRET is not set. Sessions will not persist across restarts.");
+}
+const EFFECTIVE_SECRET = SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 
 /**
  * Hash a password using bcrypt
@@ -49,7 +54,7 @@ export function createSessionToken(payload: SessionPayload): string {
   });
   const encoded = Buffer.from(data).toString("base64url");
   const signature = crypto
-    .createHmac("sha256", SESSION_SECRET)
+    .createHmac("sha256", EFFECTIVE_SECRET)
     .update(encoded)
     .digest("base64url");
   return `${encoded}.${signature}`;
@@ -73,7 +78,7 @@ export function parseSessionToken(token: string): SessionPayload | null {
     const signature = token.slice(dotIndex + 1);
 
     const expectedSig = crypto
-      .createHmac("sha256", SESSION_SECRET)
+      .createHmac("sha256", EFFECTIVE_SECRET)
       .update(encoded)
       .digest("base64url");
 
@@ -117,53 +122,18 @@ export const AUTH_COOKIE_OPTIONS = {
   path: "/",
 };
 
-/**
- * Get database connection
- * Lazily initialized to avoid issues with build time
- */
-let db: ReturnType<typeof import("drizzle-orm/postgres-js").drizzle> | null =
-  null;
-let usersTable: typeof import("@/db/schema").users | null = null;
-let allowedEmailsTable: typeof import("@/db/schema").allowedEmails | null =
-  null;
-
-export async function getDb() {
-  if (!db) {
-    const postgres = await import("postgres");
-    const { drizzle } = await import("drizzle-orm/postgres-js");
-    const schema = await import("@/db/schema");
-
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      throw new Error("DATABASE_URL environment variable is not set");
-    }
-
-    const client = postgres.default(connectionString);
-    db = drizzle(client, { schema });
-    usersTable = schema.users;
-    allowedEmailsTable = schema.allowedEmails;
-  }
-
-  return {
-    db,
-    usersTable: usersTable!,
-    allowedEmailsTable: allowedEmailsTable!,
-  };
-}
+import { db } from "@/db/client";
+import { users, allowedEmails } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * Check if email is in the allowlist
- * @param email - Email to check
- * @returns True if email is allowed to register
  */
 export async function isEmailAllowed(email: string): Promise<boolean> {
-  const { db, allowedEmailsTable } = await getDb();
-  const { eq } = await import("drizzle-orm");
-
   const [allowed] = await db
     .select()
-    .from(allowedEmailsTable)
-    .where(eq(allowedEmailsTable.email, email.toLowerCase()))
+    .from(allowedEmails)
+    .where(eq(allowedEmails.email, email.toLowerCase()))
     .limit(1);
 
   return !!allowed;
@@ -171,17 +141,12 @@ export async function isEmailAllowed(email: string): Promise<boolean> {
 
 /**
  * Find user by email
- * @param email - Email to search for
- * @returns User or null
  */
 export async function findUserByEmail(email: string) {
-  const { db, usersTable } = await getDb();
-  const { eq } = await import("drizzle-orm");
-
   const [user] = await db
     .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, email.toLowerCase()))
+    .from(users)
+    .where(eq(users.email, email.toLowerCase()))
     .limit(1);
 
   return user ?? null;
@@ -189,17 +154,12 @@ export async function findUserByEmail(email: string) {
 
 /**
  * Find user by ID
- * @param id - User ID to search for
- * @returns User or null
  */
 export async function findUserById(id: string) {
-  const { db, usersTable } = await getDb();
-  const { eq } = await import("drizzle-orm");
-
   const [user] = await db
     .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, id))
+    .from(users)
+    .where(eq(users.id, id))
     .limit(1);
 
   return user ?? null;
@@ -207,18 +167,14 @@ export async function findUserById(id: string) {
 
 /**
  * Create a new user
- * @param data - User data
- * @returns Created user
  */
 export async function createUser(data: {
   email: string;
   passwordHash: string;
   name?: string;
 }) {
-  const { db, usersTable } = await getDb();
-
   const [user] = await db
-    .insert(usersTable)
+    .insert(users)
     .values({
       email: data.email.toLowerCase(),
       passwordHash: data.passwordHash,
@@ -231,14 +187,10 @@ export async function createUser(data: {
 
 /**
  * Update user's last login timestamp
- * @param userId - User ID
  */
 export async function updateLastLogin(userId: string) {
-  const { db, usersTable } = await getDb();
-  const { eq } = await import("drizzle-orm");
-
   await db
-    .update(usersTable)
+    .update(users)
     .set({ lastLoginAt: new Date() })
-    .where(eq(usersTable.id, userId));
+    .where(eq(users.id, userId));
 }

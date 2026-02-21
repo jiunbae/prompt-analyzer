@@ -1,27 +1,11 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-
-function getDb() {
-  if (!db) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      throw new Error("DATABASE_URL is not set");
-    }
-    const client = postgres(connectionString);
-    db = drizzle(client, { schema });
-  }
-  return db;
-}
-
 export const tagsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
-    const db = getDb();
     return await db
       .select()
       .from(schema.tags)
@@ -30,8 +14,11 @@ export const tagsRouter = createTRPCRouter({
 
   create: protectedProcedure
     .input(z.object({ name: z.string().min(1), color: z.string().optional() }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user.isAdmin) {
+        throw new Error("Admin access required to create tags");
+      }
+
       const [tag] = await db
         .insert(schema.tags)
         .values({
@@ -48,8 +35,11 @@ export const tagsRouter = createTRPCRouter({
 
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user.isAdmin) {
+        throw new Error("Admin access required to delete tags");
+      }
+
       await db.delete(schema.tags).where(eq(schema.tags.id, input.id));
       return { success: true };
     }),
@@ -57,7 +47,7 @@ export const tagsRouter = createTRPCRouter({
   assignToPrompt: protectedProcedure
     .input(z.object({ promptId: z.string().uuid(), tagId: z.string().uuid() }))
     .mutation(async ({ input, ctx }) => {
-      const db = getDb();
+
       
       const [prompt] = await db
         .select()
@@ -83,7 +73,7 @@ export const tagsRouter = createTRPCRouter({
   removeFromPrompt: protectedProcedure
     .input(z.object({ promptId: z.string().uuid(), tagId: z.string().uuid() }))
     .mutation(async ({ input, ctx }) => {
-      const db = getDb();
+
       
       const [prompt] = await db
         .select()

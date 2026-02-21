@@ -1,5 +1,4 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { desc, sql, eq, and, gte, lt } from "drizzle-orm";
 import { computeSessions } from "@/lib/session-analysis";
@@ -65,15 +64,6 @@ export function formatNumber(num: number): string {
 }
 
 export async function getAnalytics(userId: string | null): Promise<AnalyticsData | null> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    console.error("DATABASE_URL is not set");
-    return null;
-  }
-
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
   try {
     // Build user filter condition
     const userFilter = userId
@@ -274,7 +264,5 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsData
   } catch (error) {
     console.error("Analytics error:", error);
     return null;
-  } finally {
-    await client.end();
   }
 }

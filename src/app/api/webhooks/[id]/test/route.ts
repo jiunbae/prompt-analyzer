@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import { rateLimiters } from "@/lib/rate-limit";
 import { sendTestWebhook } from "@/services/webhook";
 
 /**
@@ -12,14 +12,20 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+    const session = await requireAuth();
+
+    // Rate limit webhook test requests
+    const rateLimit = rateLimiters.webhookTest(session.userId);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil(rateLimit.retryAfterMs / 1000)),
+          },
+        }
+      );
     }
 
     const result = await sendTestWebhook(id, session.userId);
@@ -30,6 +36,9 @@ export async function POST(
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Webhook test error:", error);
     return NextResponse.json(
       { error: "Failed to test webhook" },

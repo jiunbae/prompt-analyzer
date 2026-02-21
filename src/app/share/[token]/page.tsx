@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { SharedPromptView } from "@/components/shared-prompt-view";
@@ -26,12 +25,6 @@ interface SharedPromptData {
  * Used by generateMetadata so crawlers / metadata prefetches don't inflate counts.
  */
 async function getSharedPromptReadOnly(token: string): Promise<SharedPromptData | null> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return null;
-
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
   try {
     const [shared] = await db
       .select()
@@ -73,8 +66,6 @@ async function getSharedPromptReadOnly(token: string): Promise<SharedPromptData 
   } catch (error) {
     console.error("Error fetching shared prompt (read-only):", error);
     return null;
-  } finally {
-    await client.end();
   }
 }
 
@@ -83,12 +74,6 @@ async function getSharedPromptReadOnly(token: string): Promise<SharedPromptData 
  * Used only on actual page render.
  */
 async function getSharedPromptAndIncrement(token: string): Promise<SharedPromptData | null> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return null;
-
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
   try {
     const [shared] = await db
       .select()
@@ -136,8 +121,6 @@ async function getSharedPromptAndIncrement(token: string): Promise<SharedPromptD
   } catch (error) {
     console.error("Error fetching shared prompt:", error);
     return null;
-  } finally {
-    await client.end();
   }
 }
 

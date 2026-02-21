@@ -1,5 +1,4 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { sql, and, eq, gte } from "drizzle-orm";
 
@@ -15,30 +14,20 @@ export async function refreshDailyAggregations(
   userId: string,
   fromDate?: Date,
 ): Promise<void> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    console.error("DATABASE_URL is not set");
-    return;
-  }
+  // Default to 30 days ago if no fromDate provided
+  const rangeFrom =
+    fromDate ??
+    (() => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - 30);
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    })();
 
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
-  try {
-    // Default to 30 days ago if no fromDate provided
-    const rangeFrom =
-      fromDate ??
-      (() => {
-        const d = new Date();
-        d.setUTCDate(d.getUTCDate() - 30);
-        d.setUTCHours(0, 0, 0, 0);
-        return d;
-      })();
-
-    // Aggregate and upsert in a single transaction for consistency
-    await db.transaction(async (tx) => {
-      // Aggregate per-day stats from prompts for this user
-      const dailyRows = await tx
+  // Aggregate and upsert in a single transaction for consistency
+  await db.transaction(async (tx) => {
+    // Aggregate per-day stats from prompts for this user
+    const dailyRows = await tx
         .select({
           date: sql<string>`date(${schema.prompts.timestamp})`,
           promptCount: sql<number>`count(*)::int`,
@@ -73,7 +62,4 @@ export async function refreshDailyAggregations(
         `);
       }
     });
-  } finally {
-    await client.end();
-  }
 }

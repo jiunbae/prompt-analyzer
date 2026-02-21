@@ -1,24 +1,8 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { desc, eq, ilike, sql, and } from "drizzle-orm";
-
-// Lazy database connection
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-
-function getDb() {
-  if (!db) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      throw new Error("DATABASE_URL is not set");
-    }
-    const client = postgres(connectionString);
-    db = drizzle(client, { schema });
-  }
-  return db;
-}
 
 export const promptsRouter = createTRPCRouter({
   /**
@@ -35,7 +19,7 @@ export const promptsRouter = createTRPCRouter({
       })
     )
     .query(async ({ input, ctx }) => {
-      const db = getDb();
+
       const { limit, offset, projectName, promptType, search } = input;
 
       const conditions = [eq(schema.prompts.userId, ctx.user.id)];
@@ -87,7 +71,7 @@ export const promptsRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input, ctx }) => {
-      const db = getDb();
+
       const result = await db.query.prompts.findFirst({
         where: and(eq(schema.prompts.id, input.id), eq(schema.prompts.userId, ctx.user.id)),
         with: {
@@ -111,7 +95,7 @@ export const promptsRouter = createTRPCRouter({
    * Get prompt statistics/analytics
    */
   getStats: protectedProcedure.query(async ({ ctx }) => {
-    const db = getDb();
+
 
     const [totalResult, projectsResult, typesResult] = await Promise.all([
       db
@@ -163,7 +147,7 @@ export const promptsRouter = createTRPCRouter({
    * Get unique project names
    */
   getProjects: protectedProcedure.query(async ({ ctx }) => {
-    const db = getDb();
+
     const result = await db
       .select({
         projectName: schema.prompts.projectName,

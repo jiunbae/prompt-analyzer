@@ -1,28 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUserId, parseDateRange } from "../_helpers";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import { parseDateRange } from "../_helpers";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    return NextResponse.json({ error: "Database not configured" }, { status: 500 });
-  }
-
-  const { searchParams } = new URL(request.url);
-  const { from, to } = parseDateRange(searchParams);
-
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
   try {
+    const session = await requireAuth();
+    const userId = session.userId;
+
+    const { searchParams } = new URL(request.url);
+    const { from, to } = parseDateRange(searchParams);
+
     const whereClause = and(
       eq(schema.prompts.userId, userId),
       gte(schema.prompts.timestamp, from),
@@ -82,12 +72,13 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Analytics overview API error:", error);
     return NextResponse.json(
       { error: "Failed to load overview analytics" },
       { status: 500 }
     );
-  } finally {
-    await client.end();
   }
 }

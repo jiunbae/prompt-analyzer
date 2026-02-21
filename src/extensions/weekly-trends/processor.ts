@@ -1,5 +1,4 @@
-import postgres from "postgres";
-import { drizzle } from "drizzle-orm/postgres-js";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, gte, lt, sql } from "drizzle-orm";
 import type {
@@ -9,15 +8,6 @@ import type {
   InsightTrend,
 } from "../types";
 import { callLLM, getLLMConfig } from "../llm";
-
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-function getDb() {
-  if (!db) {
-    const client = postgres(process.env.DATABASE_URL!);
-    db = drizzle(client, { schema });
-  }
-  return db;
-}
 
 interface WeekStats {
   totalPrompts: number;
@@ -35,7 +25,7 @@ async function queryWeekStats(
   from: Date,
   to: Date,
 ): Promise<WeekStats> {
-  const database = getDb();
+  const database = db;
 
   const whereClause = and(
     eq(schema.prompts.userId, userId),

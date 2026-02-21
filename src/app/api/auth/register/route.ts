@@ -5,9 +5,20 @@ import {
   findUserByEmail,
   createUser,
 } from "@/lib/auth";
+import { rateLimiters } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP (auth endpoints are unauthenticated)
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const rateCheck = rateLimiters.auth(ip);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many registration attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rateCheck.retryAfterMs / 1000)) } },
+      );
+    }
+
     const { email, password, name } = await request.json();
 
     // Validate input

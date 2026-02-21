@@ -1,6 +1,5 @@
 import { PromptDetail } from "@/components/prompt-detail";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, ne, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -27,14 +26,6 @@ async function getCurrentUser() {
 }
 
 async function getPrompt(id: string, userId: string | null) {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    return null;
-  }
-
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
   // Build query with user ownership check
   const whereCondition = userId
     ? and(eq(schema.prompts.id, id), eq(schema.prompts.userId, userId))
@@ -45,8 +36,6 @@ async function getPrompt(id: string, userId: string | null) {
     .from(schema.prompts)
     .where(whereCondition)
     .limit(1);
-
-  await client.end();
 
   return result[0] ?? null;
 }
@@ -63,12 +52,6 @@ async function getSimilarPrompts(
   sourcePrompt: { id: string; promptText: string; userId: string | null },
   isAdmin: boolean
 ): Promise<SimilarPrompt[]> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return [];
-
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
   try {
     const words = sourcePrompt.promptText
       .replace(/[^\w\s]/g, " ")
@@ -119,8 +102,6 @@ async function getSimilarPrompts(
     return ranked;
   } catch {
     return [];
-  } finally {
-    await client.end();
   }
 }
 
@@ -141,7 +122,6 @@ export default async function PromptDetailPage({ params }: PromptDetailPageProps
     notFound();
   }
 
-  const db = drizzle(postgres(process.env.DATABASE_URL!), { schema });
   const promptWithTags = await db.query.prompts.findFirst({
     where: eq(schema.prompts.id, prompt.id),
     with: {

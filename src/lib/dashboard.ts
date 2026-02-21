@@ -1,5 +1,4 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, gte, lt, sql, desc } from "drizzle-orm";
 
@@ -22,12 +21,6 @@ export interface DashboardData {
 }
 
 export async function getDashboardData(userId: string): Promise<DashboardData | null> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return null;
-
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
   try {
     const now = new Date();
     const todayStart = new Date(now);
@@ -152,7 +145,5 @@ export async function getDashboardData(userId: string): Promise<DashboardData | 
   } catch (error) {
     console.error("Dashboard data error:", error);
     return null;
-  } finally {
-    await client.end();
   }
 }

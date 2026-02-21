@@ -7,6 +7,7 @@ import {
   createUser,
   updateLastLogin,
 } from "@/lib/auth";
+import { rateLimiters } from "@/lib/rate-limit";
 
 /**
  * POST /api/auth/cli-login
@@ -18,6 +19,16 @@ import {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP (auth endpoints are unauthenticated)
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const rateCheck = rateLimiters.auth(ip);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many authentication attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rateCheck.retryAfterMs / 1000)) } },
+      );
+    }
+
     const { email, password, autoRegister, name } = await request.json();
 
     if (!email || !password) {

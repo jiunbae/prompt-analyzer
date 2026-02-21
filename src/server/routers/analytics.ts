@@ -1,23 +1,8 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, desc, sql, gte, lte, and } from "drizzle-orm";
-
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-
-function getDb() {
-  if (!db) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      throw new Error("DATABASE_URL is not set");
-    }
-    const client = postgres(connectionString);
-    db = drizzle(client, { schema });
-  }
-  return db;
-}
 
 export const analyticsRouter = createTRPCRouter({
   getDailyStats: protectedProcedure
@@ -28,7 +13,7 @@ export const analyticsRouter = createTRPCRouter({
       })
     )
     .query(async ({ input, ctx }) => {
-      const db = getDb();
+
       const conditions = [
         eq(schema.analyticsDaily.userId, ctx.user.id),
       ];
@@ -48,7 +33,7 @@ export const analyticsRouter = createTRPCRouter({
     }),
 
   getOverview: protectedProcedure.query(async ({ ctx }) => {
-    const db = getDb();
+
     
     const [totals] = await db
       .select({

@@ -2,6 +2,9 @@ import { SessionCard } from "@/components/session-card";
 import { SessionFilters } from "@/components/session-filters";
 import { cookies } from "next/headers";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { db } from "@/db/client";
+import * as schema from "@/db/schema";
+import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -39,16 +42,6 @@ interface SessionRow {
 }
 
 async function getSessions(params: SearchParams, userId: string) {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return { sessions: [], totalCount: 0, projects: [], sources: [], devices: [], workspaces: [] };
-
-  const { drizzle } = await import("drizzle-orm/postgres-js");
-  const postgresModule = await import("postgres");
-  const schema = await import("@/db/schema");
-  const { eq, and, gte, lte, sql, desc } = await import("drizzle-orm");
-
-  const client = postgresModule.default(connectionString);
-  const db = drizzle(client, { schema });
 
   const page = parseInt(params.page ?? "1", 10);
   const pageSize = 20;
@@ -146,7 +139,7 @@ async function getSessions(params: SearchParams, userId: string) {
         .limit(50),
     ]);
 
-    await client.end();
+
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sRows = (sessionsResult as any).rows ?? sessionsResult;
@@ -162,7 +155,7 @@ async function getSessions(params: SearchParams, userId: string) {
     };
   } catch (error) {
     console.error("Sessions query error:", error);
-    await client.end();
+
     return { sessions: [], totalCount: 0, projects: [], sources: [], devices: [], workspaces: [], error: true };
   }
 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import { rateLimiters } from "@/lib/rate-limit";
+import { db } from "@/db/client";
+import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -26,14 +28,14 @@ interface SearchResult {
  */
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+    const session = await requireAuth();
+
+    const rateCheck = rateLimiters.search(session.userId);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded" },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rateCheck.retryAfterMs / 1000)) } }
+      );
     }
 
     const { searchParams } = new URL(request.url);
@@ -54,94 +56,90 @@ export async function GET(request: NextRequest) {
     }
     const limit = parsedLimit;
 
-    const postgresModule = await import("postgres");
-    const client = postgresModule.default(process.env.DATABASE_URL!);
+    let rows: Record<string, unknown>[];
 
-    try {
-      let rows: Record<string, unknown>[];
-
-      if (mode === "keyword") {
-        rows = await client`
-          SELECT
-            id,
-            timestamp,
-            project_name,
-            LEFT(prompt_text, 300) as prompt_text,
-            source,
-            session_id,
-            ts_rank(search_vector, websearch_to_tsquery('english', ${query})) as score
-          FROM prompts
-          WHERE user_id = ${session.userId}
-            AND search_vector @@ websearch_to_tsquery('english', ${query})
-          ORDER BY score DESC
-          LIMIT ${limit}
-        `;
-      } else if (mode === "semantic") {
-        rows = await client`
-          SELECT
-            id,
-            timestamp,
-            project_name,
-            LEFT(prompt_text, 300) as prompt_text,
-            source,
-            session_id,
-            similarity(prompt_text, ${query}) as score
-          FROM prompts
-          WHERE user_id = ${session.userId}
-            AND prompt_text % ${query}
-            AND similarity(prompt_text, ${query}) > 0.1
-          ORDER BY similarity(prompt_text, ${query}) DESC
-          LIMIT ${limit}
-        `;
-      } else {
-        // hybrid mode: combine keyword and trigram scores
-        rows = await client`
-          SELECT
-            id,
-            timestamp,
-            project_name,
-            LEFT(prompt_text, 300) as prompt_text,
-            source,
-            session_id,
-            (
-              0.4 * (ts_rank(search_vector, websearch_to_tsquery('english', ${query})) / (1.0 + ts_rank(search_vector, websearch_to_tsquery('english', ${query})))) +
-              0.6 * COALESCE(similarity(prompt_text, ${query}), 0)
-            ) as score
-          FROM prompts
-          WHERE user_id = ${session.userId}
-            AND (
-              search_vector @@ websearch_to_tsquery('english', ${query})
-              OR (prompt_text % ${query} AND similarity(prompt_text, ${query}) > 0.1)
-            )
-          ORDER BY score DESC
-          LIMIT ${limit}
-        `;
-      }
-
-      const results: SearchResult[] = rows.map((row) => ({
-        id: row.id as string,
-        timestamp: String(row.timestamp),
-        projectName: row.project_name as string | null,
-        promptText: row.prompt_text as string,
-        source: row.source as string | null,
-        sessionId: row.session_id as string | null,
-        score: Number(row.score),
-        matchType: mode,
-      }));
-
-      return NextResponse.json({
-        results,
-        mode,
-        totalResults: results.length,
-        query,
-      });
-    } finally {
-      await client.end();
+    if (mode === "keyword") {
+      rows = await db.execute(sql`
+        SELECT
+          id,
+          timestamp,
+          project_name,
+          LEFT(prompt_text, 300) as prompt_text,
+          source,
+          session_id,
+          ts_rank(search_vector, websearch_to_tsquery('english', ${query})) as score
+        FROM prompts
+        WHERE user_id = ${session.userId}
+          AND search_vector @@ websearch_to_tsquery('english', ${query})
+        ORDER BY score DESC
+        LIMIT ${limit}
+      `) as unknown as Record<string, unknown>[];
+    } else if (mode === "semantic") {
+      rows = await db.execute(sql`
+        SELECT
+          id,
+          timestamp,
+          project_name,
+          LEFT(prompt_text, 300) as prompt_text,
+          source,
+          session_id,
+          similarity(prompt_text, ${query}) as score
+        FROM prompts
+        WHERE user_id = ${session.userId}
+          AND prompt_text % ${query}
+          AND similarity(prompt_text, ${query}) > 0.1
+        ORDER BY similarity(prompt_text, ${query}) DESC
+        LIMIT ${limit}
+      `) as unknown as Record<string, unknown>[];
+    } else {
+      // hybrid mode: combine keyword and trigram scores
+      rows = await db.execute(sql`
+        SELECT
+          id,
+          timestamp,
+          project_name,
+          LEFT(prompt_text, 300) as prompt_text,
+          source,
+          session_id,
+          (
+            0.4 * (ts_rank(search_vector, websearch_to_tsquery('english', ${query})) / (1.0 + ts_rank(search_vector, websearch_to_tsquery('english', ${query})))) +
+            0.6 * COALESCE(similarity(prompt_text, ${query}), 0)
+          ) as score
+        FROM prompts
+        WHERE user_id = ${session.userId}
+          AND (
+            search_vector @@ websearch_to_tsquery('english', ${query})
+            OR (prompt_text % ${query} AND similarity(prompt_text, ${query}) > 0.1)
+          )
+        ORDER BY score DESC
+        LIMIT ${limit}
+      `) as unknown as Record<string, unknown>[];
     }
+
+    const results: SearchResult[] = rows.map((row) => ({
+      id: row.id as string,
+      timestamp: String(row.timestamp),
+      projectName: row.project_name as string | null,
+      promptText: row.prompt_text as string,
+      source: row.source as string | null,
+      sessionId: row.session_id as string | null,
+      score: Number(row.score),
+      matchType: mode,
+    }));
+
+    return NextResponse.json({
+      results,
+      mode,
+      totalResults: results.length,
+      query,
+    });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Search API error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Search failed" },
       { status: 500 }
     );
   }

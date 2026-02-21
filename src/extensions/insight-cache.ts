@@ -1,21 +1,8 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { sql, and, eq, gt } from "drizzle-orm";
 import { createHash } from "crypto";
 import type { InsightResult } from "./types";
-
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-
-function getDb() {
-  if (!db) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) throw new Error("DATABASE_URL is not set");
-    const client = postgres(connectionString);
-    db = drizzle(client, { schema });
-  }
-  return db;
-}
 
 /** Hash input data to detect staleness */
 export function hashData(data: unknown): string {
@@ -31,7 +18,6 @@ export async function getCachedInsight(
   insightType: string,
   parameters?: Record<string, unknown>,
 ): Promise<InsightResult | null> {
-  const db = getDb();
 
   const conditions = [
     eq(schema.aiInsights.userId, userId),
@@ -62,7 +48,6 @@ export async function cacheInsight(
     ttlHours?: number;
   },
 ): Promise<void> {
-  const db = getDb();
   const ttl = options.ttlHours ?? 24;
   const expiresAt = new Date(Date.now() + ttl * 60 * 60 * 1000);
 
@@ -92,7 +77,6 @@ export async function cacheInsight(
 
 /** Delete expired insights */
 export async function cleanExpiredInsights(): Promise<number> {
-  const db = getDb();
   const result = await db
     .delete(schema.aiInsights)
     .where(sql`${schema.aiInsights.expiresAt} < now()`)
@@ -104,7 +88,6 @@ export async function cleanExpiredInsights(): Promise<number> {
 export async function getUserInsights(
   userId: string,
 ): Promise<Array<{ id: string; type: string; result: InsightResult; generatedAt: Date }>> {
-  const db = getDb();
   const rows = await db
     .select({
       id: schema.aiInsights.id,

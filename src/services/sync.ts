@@ -1,4 +1,5 @@
-import { env } from "@/env";
+import { db } from "@/db/client";
+import * as schema from "@/db/schema";
 import { sql } from "drizzle-orm";
 import type {
   PromptMetadata,
@@ -44,26 +45,7 @@ export function extractMetadata(
   };
 }
 
-let db: any = null;
-let promptsTable: any = null;
-
-async function getDb() {
-  if (!db) {
-    const postgres = (await import("postgres")).default;
-    const { drizzle } = await import("drizzle-orm/postgres-js");
-    const schema = await import("@/db/schema");
-
-    const connectionString = env.DATABASE_URL;
-    const client = postgres(connectionString);
-    db = drizzle(client, { schema });
-    promptsTable = schema.prompts;
-  }
-  return { db, promptsTable };
-}
-
 export async function updateDailyAnalytics(dateStr: string, userId: string) {
-  const { db } = await getDb();
-  const schema = await import("@/db/schema");
   const { and, eq, sql } = await import("drizzle-orm");
 
   const [stats] = await db
@@ -109,9 +91,7 @@ export async function updateDailyAnalytics(dateStr: string, userId: string) {
 }
 
 export async function findUserByToken(token: string) {
-  const { db } = await getDb();
   const { eq } = await import("drizzle-orm");
-  const schema = await import("@/db/schema");
 
   const [user] = await db
     .select()

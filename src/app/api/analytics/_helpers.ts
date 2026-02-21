@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { AUTH_COOKIE_NAME, parseSessionToken } from "@/lib/auth";
+import { requireAuth } from "@/lib/with-auth";
 
 export function parseDateRange(searchParams: URLSearchParams): { from: Date; to: Date } {
   const now = new Date();
@@ -33,13 +32,10 @@ export function parseDateRange(searchParams: URLSearchParams): { from: Date; to:
 }
 
 export async function getSessionUserId(): Promise<string | null> {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-  if (!sessionToken) return null;
-  const session = parseSessionToken(sessionToken);
-  if (!session) return null;
-
-  return session.userId;
+  try {
+    const session = await requireAuth();
+    return session.userId;
+  } catch {
+    return null;
+  }
 }
-

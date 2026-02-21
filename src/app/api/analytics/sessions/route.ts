@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUserId, parseDateRange } from "../_helpers";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import { parseDateRange } from "../_helpers";
 import { computeSessions } from "@/lib/session-analysis";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { and, eq, gte, lt } from "drizzle-orm";
 
@@ -11,23 +11,13 @@ function toDateOnlyString(date: Date) {
 }
 
 export async function GET(request: NextRequest) {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    return NextResponse.json({ error: "Database not configured" }, { status: 500 });
-  }
-
-  const url = new URL(request.url);
-  const { from, to } = parseDateRange(url.searchParams);
-
-  const client = postgres(connectionString);
-  const db = drizzle(client, { schema });
-
   try {
+    const session = await requireAuth();
+    const userId = session.userId;
+
+    const url = new URL(request.url);
+    const { from, to } = parseDateRange(url.searchParams);
+
     const rows = await db
       .select({
         timestamp: schema.prompts.timestamp,
@@ -78,12 +68,13 @@ export async function GET(request: NextRequest) {
       sessionsPerDay,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Analytics sessions API error:", error);
     return NextResponse.json(
       { error: "Failed to load sessions analytics" },
       { status: 500 }
     );
-  } finally {
-    await client.end();
   }
 }

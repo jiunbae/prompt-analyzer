@@ -1,25 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, ne, sql } from "drizzle-orm";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
 import { computeSimilarity } from "@/lib/prompt-diff";
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
@@ -32,17 +20,6 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      return NextResponse.json(
-        { error: "Database not configured" },
-        { status: 500 }
-      );
-    }
-
-    const client = postgres(connectionString);
-    const db = drizzle(client, { schema });
 
     // Fetch the source prompt
     const ownershipCondition = session.isAdmin
@@ -63,7 +40,6 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     if (!sourcePrompt) {
-      await client.end();
       return NextResponse.json(
         { error: "Prompt not found" },
         { status: 404 }
@@ -80,7 +56,6 @@ export async function GET(request: NextRequest) {
       .slice(0, 15);
 
     if (words.length === 0) {
-      await client.end();
       return NextResponse.json({ prompts: [] });
     }
 
@@ -112,8 +87,6 @@ export async function GET(request: NextRequest) {
       )
       .limit(limit * 3); // Fetch extra to re-rank with Jaccard
 
-    await client.end();
-
     // Re-rank candidates using a combined score: 50% Jaccard + 50% normalised ts_rank
     const maxRank = Math.max(...candidates.map((c) => c.rank), 0.001);
     const ranked = candidates
@@ -134,6 +107,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ prompts: ranked });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Similar prompts API error:", error);
     return NextResponse.json(
       { error: "Failed to find similar prompts" },

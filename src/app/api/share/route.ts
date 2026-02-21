@@ -1,26 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
 import crypto from "crypto";
 import { z } from "zod";
-
-function getDb() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("DATABASE_URL not configured");
-  const client = postgres(connectionString);
-  return { db: drizzle(client, { schema }), client };
-}
-
-async function getSession() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!sessionToken) return null;
-  return parseSessionToken(sessionToken);
-}
 
 const createShareSchema = z.object({
   promptId: z.string().uuid("promptId must be a valid UUID"),
@@ -36,12 +20,8 @@ const createShareSchema = z.object({
 
 // POST /api/share - Create a share link
 export async function POST(request: NextRequest) {
-  const { db, client } = getDb();
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     const body = await request.json();
     const parsed = createShareSchema.safeParse(body);
@@ -86,21 +66,18 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ shared }, { status: 201 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Share POST error:", error);
     return NextResponse.json({ error: "Failed to create share link" }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }
 
 // GET /api/share - List user's shared links
 export async function GET() {
-  const { db, client } = getDb();
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     const shares = await db
       .select({
@@ -121,10 +98,11 @@ export async function GET() {
 
     return NextResponse.json({ shares });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Share GET error:", error);
     return NextResponse.json({ error: "Failed to fetch shares" }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }
 
@@ -134,12 +112,8 @@ const deleteShareSchema = z.object({
 
 // DELETE /api/share - Revoke a share link (id in body or query)
 export async function DELETE(request: NextRequest) {
-  const { db, client } = getDb();
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     const url = new URL(request.url);
     const parsed = deleteShareSchema.safeParse({ id: url.searchParams.get("id") });
@@ -168,9 +142,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Share DELETE error:", error);
     return NextResponse.json({ error: "Failed to revoke share" }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }

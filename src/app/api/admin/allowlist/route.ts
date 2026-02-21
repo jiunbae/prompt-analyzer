@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, getDb, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import { db } from "@/db/client";
+import { users, allowedEmails } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * GET /api/admin/allowlist
@@ -8,44 +10,26 @@ import { parseSessionToken, getDb, AUTH_COOKIE_NAME } from "@/lib/auth";
  */
 export async function GET() {
   try {
-    // Check authentication and admin status
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     if (!session.isAdmin) {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    // Get all allowed emails
-    const { db, allowedEmailsTable, usersTable } = await getDb();
-    const { eq } = await import("drizzle-orm");
-
-    const allowedEmails = await db
+    const entries = await db
       .select({
-        id: allowedEmailsTable.id,
-        email: allowedEmailsTable.email,
-        addedBy: allowedEmailsTable.addedBy,
-        addedAt: allowedEmailsTable.addedAt,
-        addedByName: usersTable.name,
-        addedByEmail: usersTable.email,
+        id: allowedEmails.id,
+        email: allowedEmails.email,
+        addedBy: allowedEmails.addedBy,
+        addedAt: allowedEmails.addedAt,
+        addedByName: users.name,
+        addedByEmail: users.email,
       })
-      .from(allowedEmailsTable)
-      .leftJoin(usersTable, eq(allowedEmailsTable.addedBy, usersTable.id));
+      .from(allowedEmails)
+      .leftJoin(users, eq(allowedEmails.addedBy, users.id));
 
     return NextResponse.json({
-      allowedEmails: allowedEmails.map((e) => ({
+      allowedEmails: entries.map((e) => ({
         id: e.id,
         email: e.email,
         addedAt: e.addedAt,
@@ -59,11 +43,11 @@ export async function GET() {
       })),
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Error listing allowlist:", error);
-    return NextResponse.json(
-      { error: "An error occurred" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }
 
@@ -73,64 +57,36 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication and admin status
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     if (!session.isAdmin) {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
     const { email } = await request.json();
 
     if (!email) {
-      return NextResponse.json(
-        { error: "Email is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: "Invalid email format" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
     }
-
-    const { db, allowedEmailsTable } = await getDb();
-    const { eq } = await import("drizzle-orm");
 
     // Check if email already exists in allowlist
     const [existing] = await db
       .select()
-      .from(allowedEmailsTable)
-      .where(eq(allowedEmailsTable.email, email.toLowerCase()))
+      .from(allowedEmails)
+      .where(eq(allowedEmails.email, email.toLowerCase()))
       .limit(1);
 
     if (existing) {
-      return NextResponse.json(
-        { error: "Email is already in the allowlist" },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "Email is already in the allowlist" }, { status: 409 });
     }
 
-    // Add email to allowlist
     const [newEntry] = await db
-      .insert(allowedEmailsTable)
+      .insert(allowedEmails)
       .values({
         email: email.toLowerCase(),
         addedBy: session.userId,
@@ -146,11 +102,11 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Error adding to allowlist:", error);
-    return NextResponse.json(
-      { error: "An error occurred" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }
 
@@ -160,24 +116,10 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    // Check authentication and admin status
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     if (!session.isAdmin) {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -185,44 +127,32 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id");
 
     if (!email && !id) {
-      return NextResponse.json(
-        { error: "Email or ID is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Email or ID is required" }, { status: 400 });
     }
-
-    const { db, allowedEmailsTable } = await getDb();
-    const { eq } = await import("drizzle-orm");
 
     let deleted;
     if (id) {
       [deleted] = await db
-        .delete(allowedEmailsTable)
-        .where(eq(allowedEmailsTable.id, id))
+        .delete(allowedEmails)
+        .where(eq(allowedEmails.id, id))
         .returning();
     } else if (email) {
       [deleted] = await db
-        .delete(allowedEmailsTable)
-        .where(eq(allowedEmailsTable.email, email.toLowerCase()))
+        .delete(allowedEmails)
+        .where(eq(allowedEmails.email, email.toLowerCase()))
         .returning();
     }
 
     if (!deleted) {
-      return NextResponse.json(
-        { error: "Email not found in allowlist" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Email not found in allowlist" }, { status: 404 });
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "Email removed from allowlist",
-    });
+    return NextResponse.json({ success: true, message: "Email removed from allowlist" });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Error removing from allowlist:", error);
-    return NextResponse.json(
-      { error: "An error occurred" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }

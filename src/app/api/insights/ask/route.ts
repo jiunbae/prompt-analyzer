@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
 import { callLLM, getLLMConfig } from "@/extensions/llm";
 import type { InsightResult } from "@/extensions/types";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, gte, sql, desc } from "drizzle-orm";
 
@@ -95,26 +93,9 @@ function normalizeInsightResult(parsed: unknown): InsightResult {
   };
 }
 
-let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-function getDb() {
-  if (!_db) {
-    const client = postgres(process.env.DATABASE_URL!);
-    _db = drizzle(client, { schema });
-  }
-  return _db;
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     const body = await request.json();
     const question = typeof body.question === "string" ? body.question.trim() : "";
@@ -132,8 +113,6 @@ export async function POST(request: NextRequest) {
         { status: 503 },
       );
     }
-
-    const db = getDb();
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -310,6 +289,9 @@ ${question}
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Ask data API error:", error);
     return NextResponse.json(
       { error: "Failed to process your question" },

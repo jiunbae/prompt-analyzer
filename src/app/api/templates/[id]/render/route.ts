@@ -1,25 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
 import { z } from "zod";
-
-function getDb() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("DATABASE_URL not configured");
-  const client = postgres(connectionString);
-  return { db: drizzle(client, { schema }), client };
-}
-
-async function getSession() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!sessionToken) return null;
-  return parseSessionToken(sessionToken);
-}
 
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -33,13 +17,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { db, client } = getDb();
   try {
     const { id } = await params;
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     const body = await request.json();
     const parsed = renderBodySchema.safeParse(body);
@@ -95,9 +75,10 @@ export async function POST(
 
     return NextResponse.json({ rendered });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Templates render error:", error);
     return NextResponse.json({ error: "Failed to render template" }, { status: 500 });
-  } finally {
-    await client.end();
   }
 }

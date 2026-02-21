@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { db } from "@/db/client";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import * as schema from "@/db/schema";
+import { eq, and, gte, lt, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -25,15 +27,7 @@ function parseDate(value: string): Date | null {
  */
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     const { searchParams } = new URL(request.url);
     const fromParam = searchParams.get("from");
@@ -69,59 +63,50 @@ export async function GET(request: NextRequest) {
       : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const toExclusive = new Date(toDateUTC.getTime() + 24 * 60 * 60 * 1000);
 
-    const { drizzle } = await import("drizzle-orm/postgres-js");
-    const postgresModule = await import("postgres");
-    const schema = await import("@/db/schema");
-    const { eq, and, gte, lt, sql } = await import("drizzle-orm");
+    const conditions = [
+      eq(schema.prompts.userId, session.userId),
+      sql`${schema.prompts.sessionId} IS NOT NULL`,
+      gte(schema.prompts.timestamp, from),
+      lt(schema.prompts.timestamp, toExclusive),
+    ];
 
-    const client = postgresModule.default(process.env.DATABASE_URL!);
-    const db = drizzle(client, { schema });
+    if (project) conditions.push(eq(schema.prompts.projectName, project));
+    if (source) conditions.push(eq(schema.prompts.source, source));
 
-    try {
-      const conditions = [
-        eq(schema.prompts.userId, session.userId),
-        sql`${schema.prompts.sessionId} IS NOT NULL`,
-        gte(schema.prompts.timestamp, from),
-        lt(schema.prompts.timestamp, toExclusive),
-      ];
+    const whereClause = and(...conditions);
 
-      if (project) conditions.push(eq(schema.prompts.projectName, project));
-      if (source) conditions.push(eq(schema.prompts.source, source));
+    // Get per-day distinct session counts — no session details, no pagination
+    const result = await db.execute(sql`
+      SELECT
+        (MIN(${schema.prompts.timestamp}) AT TIME ZONE 'UTC')::date::text as date,
+        COUNT(DISTINCT ${schema.prompts.sessionId})::int as count
+      FROM ${schema.prompts}
+      WHERE ${whereClause}
+      GROUP BY ${schema.prompts.sessionId}
+    `);
 
-      const whereClause = and(...conditions);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = ((result as any).rows ?? result) as Record<string, unknown>[];
 
-      // Get per-day distinct session counts — no session details, no pagination
-      const result = await db.execute(sql`
-        SELECT
-          (MIN(${schema.prompts.timestamp}) AT TIME ZONE 'UTC')::date::text as date,
-          COUNT(DISTINCT ${schema.prompts.sessionId})::int as count
-        FROM ${schema.prompts}
-        WHERE ${whereClause}
-        GROUP BY ${schema.prompts.sessionId}
-      `);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = ((result as any).rows ?? result) as Record<string, unknown>[];
-
-      // Aggregate by date (a session's date is based on its first prompt's UTC date)
-      const dayMap = new Map<string, number>();
-      for (const row of rows) {
-        const date = String(row.date);
-        dayMap.set(date, (dayMap.get(date) ?? 0) + Number(row.count));
-      }
-
-      const days = Array.from(dayMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([date, count]) => ({ date, count }));
-
-      return NextResponse.json({ days });
-    } finally {
-      await client.end();
+    // Aggregate by date (a session's date is based on its first prompt's UTC date)
+    const dayMap = new Map<string, number>();
+    for (const row of rows) {
+      const date = String(row.date);
+      dayMap.set(date, (dayMap.get(date) ?? 0) + Number(row.count));
     }
+
+    const days = Array.from(dayMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, count]) => ({ date, count }));
+
+    return NextResponse.json({ days });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Calendar API error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Failed to load calendar data" },
       { status: 500 }
     );
   }

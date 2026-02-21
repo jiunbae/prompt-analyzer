@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME, getDb } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/with-auth";
+import { rateLimiters } from "@/lib/rate-limit";
+import { db } from "@/db/client";
+import { users } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 /**
@@ -9,28 +11,27 @@ import { eq, sql } from "drizzle-orm";
  */
 export async function POST() {
   try {
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+    const session = await requireAuth();
 
-    if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    const rateLimit = rateLimiters.auth(session.userId);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(rateLimit.retryAfterMs / 1000)) },
+        }
+      );
     }
-
-    const session = parseSessionToken(sessionToken);
-    if (!session) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
-
-    const { db, usersTable } = await getDb();
 
     // Generate new token and update user
     const [updatedUser] = await db
-      .update(usersTable)
+      .update(users)
       .set({
         token: sql`gen_random_uuid()`,
       })
-      .where(eq(usersTable.id, session.userId))
-      .returning({ token: usersTable.token });
+      .where(eq(users.id, session.userId))
+      .returning({ token: users.token });
 
     if (!updatedUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -42,6 +43,9 @@ export async function POST() {
       message: "Token regenerated successfully. Update your prompt capture hook configuration.",
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Token regeneration error:", error);
     return NextResponse.json(
       { error: "Failed to regenerate token" },
