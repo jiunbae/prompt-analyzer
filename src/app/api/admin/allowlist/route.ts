@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, AuthError } from "@/lib/with-auth";
+import { requireAdmin, AuthError } from "@/lib/with-auth";
 import { db } from "@/db/client";
 import { users, allowedEmails } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -10,11 +10,7 @@ import { eq } from "drizzle-orm";
  */
 export async function GET() {
   try {
-    const session = await requireAuth();
-
-    if (!session.isAdmin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const entries = await db
       .select({
@@ -44,7 +40,7 @@ export async function GET() {
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Error listing allowlist:", error);
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
@@ -57,11 +53,7 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireAuth();
-
-    if (!session.isAdmin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
+    const session = await requireAdmin();
 
     const { email } = await request.json();
 
@@ -103,7 +95,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Error adding to allowlist:", error);
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
@@ -116,11 +108,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await requireAuth();
-
-    if (!session.isAdmin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const { searchParams } = new URL(request.url);
     const email = searchParams.get("email");
@@ -150,7 +138,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, message: "Email removed from allowlist" });
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Error removing from allowlist:", error);
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });

@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, AuthError } from "@/lib/with-auth";
+import { requireAdmin, AuthError } from "@/lib/with-auth";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { desc, eq, and, gte, lte, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireAuth();
-
-    if (!session.isAdmin) {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
-    }
+    await requireAdmin();
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId") || null;
@@ -63,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     if (to) {
       const toDate = new Date(to);
-      toDate.setHours(23, 59, 59, 999);
+      toDate.setUTCHours(23, 59, 59, 999);
       conditions.push(lte(schema.prompts.timestamp, toDate));
     }
 
@@ -192,7 +185,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Admin prompts API error:", error);
     return NextResponse.json(

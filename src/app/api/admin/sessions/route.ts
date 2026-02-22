@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, AuthError } from "@/lib/with-auth";
+import { requireAdmin, AuthError } from "@/lib/with-auth";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
@@ -8,11 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireAuth();
-
-    if (!session.isAdmin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId") || null;
@@ -40,7 +36,7 @@ export async function GET(request: NextRequest) {
     if (from) conditions.push(gte(schema.prompts.timestamp, new Date(from)));
     if (to) {
       const toDate = new Date(to);
-      toDate.setHours(23, 59, 59, 999);
+      toDate.setUTCHours(23, 59, 59, 999);
       conditions.push(lte(schema.prompts.timestamp, toDate));
     }
 
@@ -137,7 +133,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Admin sessions API error:", error);
     return NextResponse.json(

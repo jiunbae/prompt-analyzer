@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, AuthError } from "@/lib/with-auth";
+import { requireAdmin, AuthError } from "@/lib/with-auth";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
@@ -10,11 +10,7 @@ import { eq, desc } from "drizzle-orm";
  */
 export async function GET() {
   try {
-    const session = await requireAuth();
-
-    if (!session.isAdmin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
+    await requireAdmin();
 
     const allUsers = await db
       .select({
@@ -31,7 +27,7 @@ export async function GET() {
     return NextResponse.json({ users: allUsers });
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Error listing users:", error);
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
@@ -44,11 +40,7 @@ export async function GET() {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await requireAuth();
-
-    if (!session.isAdmin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
+    const session = await requireAdmin();
 
     const { userId, isAdmin } = await request.json();
 
@@ -85,7 +77,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ user: updated });
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Error updating user:", error);
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });

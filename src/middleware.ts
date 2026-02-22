@@ -68,7 +68,7 @@ async function verifySessionToken(
     if (!parsed.userId || !parsed.email || !parsed.token) return null;
 
     // Check expiry
-    if (parsed.iat && Date.now() - parsed.iat > MAX_TOKEN_AGE_MS) return null;
+    if (!parsed.iat || Date.now() - parsed.iat > MAX_TOKEN_AGE_MS) return null;
 
     return {
       userId: parsed.userId,
@@ -95,9 +95,6 @@ const publicRoutes = [
 
 // Routes that accept alternative authentication (X-User-Token header)
 const tokenAuthRoutes = ["/api/sync"];
-
-// Routes that require admin access
-const adminRoutes = ["/api/admin", "/admin"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -151,27 +148,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: "Invalid session" }, { status: 401 });
   }
 
-  // Check admin routes
-  if (adminRoutes.some((route) => pathname.startsWith(route))) {
-    if (!session.isAdmin) {
-      if (!pathname.startsWith("/api/")) {
-        // Redirect non-admins to home
-        const homeUrl = new URL("/", request.url);
-        return NextResponse.redirect(homeUrl);
-      }
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 },
-      );
-    }
-  }
-
   // Add user info to request headers for downstream use
   const requestHeaders = new Headers(request.headers);
   // Used by tRPC context (src/server/trpc.ts)
   requestHeaders.set("x-user-id", session.userId);
   requestHeaders.set("x-user-email", session.email);
-  requestHeaders.set("x-user-is-admin", String(session.isAdmin));
 
   return NextResponse.next({
     request: {

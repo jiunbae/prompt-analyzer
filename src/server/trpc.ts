@@ -1,6 +1,23 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
+import { db } from "@/db/client";
+import * as schema from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+async function resolveIsAdmin(userId: string): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ isAdmin: schema.users.isAdmin })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return !!row?.isAdmin;
+  } catch {
+    // Fail closed on role lookup.
+    return false;
+  }
+}
 
 /**
  * Context creation for tRPC
@@ -8,7 +25,7 @@ import { ZodError } from "zod";
 export const createTRPCContext = async (opts: { headers: Headers }) => {
   const userId = opts.headers.get("x-user-id");
   const email = opts.headers.get("x-user-email");
-  const isAdmin = opts.headers.get("x-user-is-admin") === "true";
+  const isAdmin = userId ? await resolveIsAdmin(userId) : false;
 
   return {
     headers: opts.headers,
