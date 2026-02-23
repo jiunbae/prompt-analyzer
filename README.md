@@ -12,7 +12,7 @@
 
 ### Your AI coding sessions, captured and analyzed.
 
-A self-hosted prompt journal + CLI that captures every interaction<br />with Claude Code, Codex, and more — then turns them into actionable insights.
+A self-hosted prompt journal + CLI that captures every interaction<br />with Claude Code, Codex, OpenCode, and more — then turns them into actionable insights.
 
 <br />
 
@@ -23,7 +23,7 @@ A self-hosted prompt journal + CLI that captures every interaction<br />with Cla
 
 <br />
 
-**[Start with Agent](#start-with-agent)** · **[Start with Human](#start-with-human)** · **[CLI](#-cli)** · **[Dashboard](#-dashboard)** · **[Local Mode](#-local-dashboard)** · **[Server Deploy](#-server-deployment)** · **[Contributing](#-contributing)**
+**[Quickstart for Agents](#quickstart-for-agents)** · **[Start with Agent](#start-with-agent)** · **[Start with Human](#start-with-human)** · **[CLI](#-cli)** · **[Dashboard](#-dashboard)** · **[Local Mode](#-local-dashboard)** · **[Server Deploy](#-server-deployment)** · **[Contributing](#-contributing)**
 
 <br />
 
@@ -98,12 +98,105 @@ Local SQLite → server API<br/>Works offline, syncs when ready
 
 <br />
 
-## Start with Agent
+## Quickstart for Agents
 
-Copy-paste this prompt into your coding agent to install Oh My Prompt with interactive setup:
+<div><img src="https://quickstart-for-agents.vercel.app/api/header.svg?theme=codex&title=Install+Oh+My+Prompt&lang=Agents" width="100%" /></div>
 
 ```text
-Install Oh My Prompt on this machine.
+Install Oh My Prompt from https://github.com/jiunbae/oh-my-prompt on this machine.
+
+Before running commands, ask me to choose one install method:
+1) npm install -g oh-my-prompt (recommended)
+2) npx oh-my-prompt setup (no global install)
+3) source install (git clone + pnpm install + pnpm build:cli + npm link)
+
+After installation, run:
+  omp setup
+
+Important:
+- Use interactive setup only.
+- Do NOT use setup flags like --server, --token, --hooks, --yes, or --dry-run.
+- Ask me each setup input in order:
+  server URL, auth/login or token, device name, and hook installs (Claude/Codex/OpenCode).
+
+After setup completes, verify with:
+- omp doctor
+- omp status
+
+Finally, summarize:
+- configured hooks and install status
+- server URL
+- token status
+```
+
+<div><img src="https://quickstart-for-agents.vercel.app/api/footer.svg?theme=codex&model=GPT-5.3+Codex&agent=Installer" width="100%" /></div>
+
+<br />
+
+## Start with Agent
+
+Paste this into your AI agent (Claude Code, Codex, OpenCode, Gemini):
+
+> Install Oh My Prompt (https://github.com/jiunbae/oh-my-prompt).
+> Use one install method: `npm install -g oh-my-prompt` (recommended), `npx oh-my-prompt setup`, or source install (`git clone` + `pnpm build:cli`).
+> Then run `omp setup` in interactive mode only (no setup flags) and let me answer the prompts directly.
+> After setup, run `omp doctor` and `omp status`, then summarize configured hooks, server URL, and token status.
+
+`omp setup` guides the full interactive flow:
+
+```bash
+$ omp setup
+
+  Oh My Prompt - Setup Wizard
+  ============================
+
+  [1/4] Server URL
+  > Server URL [https://prompt.jiun.dev]:
+
+  [2/4] Authentication
+  > Choice [1]:
+  > Email:
+  > Password (press Enter if new account):
+
+  [3/4] Device Name
+  > Device name [my-laptop]:
+
+  [4/4] Install Hooks
+  > Install Claude Code hook? [Y/n]:
+  > Install Codex hook? [Y/n]:
+  > Install OpenCode hook? [Y/n]:
+
+  Running doctor...
+  Setup complete!
+```
+
+<details>
+<summary><b>Manual Install Options</b></summary>
+
+```bash
+# npm (recommended)
+npm install -g oh-my-prompt && omp setup
+
+# npx (no global install)
+npx oh-my-prompt setup
+
+# source
+git clone https://github.com/jiunbae/oh-my-prompt.git
+cd oh-my-prompt
+pnpm install
+pnpm build:cli
+cd packages/omp-cli
+npm link
+omp setup
+```
+
+</details>
+
+<details>
+<summary><b>Strict Copy/Paste Prompt</b></summary>
+
+```text
+Install Oh My Prompt from https://github.com/jiunbae/oh-my-prompt on this machine.
 
 Before running commands, ask me to choose only the install method:
 1) npm install -g oh-my-prompt (recommended)
@@ -125,6 +218,8 @@ After setup completes, verify with:
 Finally, show exactly what was configured (hooks, server URL, and token status).
 ```
 
+</details>
+
 ## Start with Human
 
 ```bash
@@ -138,7 +233,7 @@ omp setup
 omp doctor
 ```
 
-That's it. Now use Claude Code or Codex normally — prompts are captured automatically.
+That's it. Now use Claude Code, Codex, or OpenCode normally — prompts are captured automatically.
 
 ```bash
 claude "Refactor this function to use async/await"
@@ -243,8 +338,8 @@ $ omp stats --group-by week
 | Command | Description |
 |:--------|:------------|
 | `omp setup` | Interactive configuration wizard |
-| `omp install [claude\|codex\|all]` | Install capture hooks |
-| `omp uninstall [claude\|codex\|all]` | Remove capture hooks |
+| `omp install [claude\|codex\|opencode\|all]` | Install capture hooks |
+| `omp uninstall [claude\|codex\|opencode\|all]` | Remove capture hooks |
 | `omp status` | Show config and hook status |
 | `omp doctor` | Validate setup, diagnose issues |
 | `omp sync` | Sync local prompts to server |

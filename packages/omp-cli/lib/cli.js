@@ -6,6 +6,8 @@ const {
   uninstallClaudeHook,
   installCodexHook,
   uninstallCodexHook,
+  installOpenCodeHook,
+  uninstallOpenCodeHook,
   listHookStatus,
 } = require("./hooks");
 const { ingestPayload, replayQueue } = require("./ingest");
@@ -43,7 +45,7 @@ function printHelp() {
 
   COMMANDS
     setup              Interactive setup wizard
-    install            Install hooks for Claude Code / Codex
+    install            Install hooks for Claude Code / Codex / OpenCode
     uninstall          Remove hooks (--all for full cleanup)
     status             Show current configuration and hook status
     doctor             Diagnose common issues
@@ -51,6 +53,9 @@ function printHelp() {
     sync               Upload local records to server
     sync status        Show sync checkpoint and recent runs
     sync flush         Delete all server-side records (destructive)
+    sync auto          Start background auto-sync daemon
+    sync auto stop     Stop auto-sync daemon
+    sync auto status   Show auto-sync daemon status
 
     backfill           Import from Claude transcripts / Codex history
     import             Import from external sources
@@ -154,11 +159,15 @@ function commandExists(cmd) {
 function detectCliTargets() {
   const targets = [];
   const home = require("os").homedir();
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
   if (commandExists("claude") || fs.existsSync(path.join(home, ".claude"))) {
     targets.push("claude");
   }
   if (commandExists("codex") || fs.existsSync(path.join(home, ".codex"))) {
     targets.push("codex");
+  }
+  if (commandExists("opencode") || fs.existsSync(path.join(xdgConfigHome, "opencode"))) {
+    targets.push("opencode");
   }
   return targets;
 }
@@ -168,7 +177,7 @@ function resolveCliList(cliOption) {
     return detectCliTargets();
   }
   if (cliOption === "all") {
-    return ["claude", "codex"];
+    return ["claude", "codex", "opencode"];
   }
   return cliOption.split(",").map((entry) => entry.trim());
 }
@@ -213,7 +222,33 @@ async function handleInstall(options) {
     });
   }
 
+  if (targets.includes("opencode")) {
+    const opencodeResult = installOpenCodeHook();
+    config.hooks.enabled.opencode = opencodeResult.configured;
+    installed.push({
+      cli: "opencode",
+      path: opencodeResult.scriptPath,
+      configPath: opencodeResult.configPath,
+      configured: opencodeResult.configured,
+      conflict: opencodeResult.conflict,
+    });
+  }
+
   saveConfig(config);
+
+  // Start auto-sync daemon if enabled
+  if (config.sync?.auto) {
+    try {
+      const { startDaemon } = require("./auto-sync");
+      const daemonResult = startDaemon(config);
+      if (daemonResult.errors && daemonResult.errors.length) {
+        console.warn("Warning: auto-sync daemon failed to start: " + daemonResult.errors.join("; "));
+      }
+    } catch (err) {
+      console.warn("Warning: auto-sync daemon failed to start: " + (err.message || "unknown error"));
+    }
+  }
+
   return installed;
 }
 
@@ -242,6 +277,14 @@ async function handleUninstall(options) {
   const isFull = isAll && !options["hooks-only"];
   const interactive = process.stdin.isTTY && !options.yes && !options.y;
 
+  // Stop auto-sync daemon if running
+  try {
+    const { stopDaemon } = require("./auto-sync");
+    stopDaemon();
+  } catch (err) {
+    console.warn("Warning: auto-sync daemon failed to stop: " + (err.message || "unknown error"));
+  }
+
   // If --all flag: full uninstall (hooks + config + data)
   if (isFull) {
     const configDir = getConfigDir();
@@ -257,6 +300,7 @@ async function handleUninstall(options) {
       console.log("  This will remove:");
       console.log("    - Claude Code hook (~/.claude/hooks/prompt-logger.sh)");
       console.log("    - Codex hook (~/.config/oh-my-prompt/hooks/)");
+      console.log("    - OpenCode plugin hook (~/.config/oh-my-prompt/hooks/opencode/)");
       if (configExists) console.log("    - Configuration (~/.config/oh-my-prompt/config.json)");
       if (dbExists) console.log("    - Local database (~/.config/oh-my-prompt/omp.db)");
       console.log("    - All data in " + configDir);
@@ -290,6 +334,14 @@ async function handleUninstall(options) {
       if (codexResult.scriptPath || codexResult.removed) {
         removed.push({ cli: "codex", path: codexResult.scriptPath });
         console.log("  Removed Codex hook: " + (codexResult.scriptPath || ""));
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const opencodeResult = uninstallOpenCodeHook();
+      if (opencodeResult.scriptPath || opencodeResult.removed || opencodeResult.configUpdated) {
+        removed.push({ cli: "opencode", path: opencodeResult.scriptPath });
+        console.log("  Removed OpenCode hook: " + (opencodeResult.scriptPath || ""));
       }
     } catch { /* ignore */ }
 
@@ -352,6 +404,19 @@ async function handleUninstall(options) {
     }
   }
 
+  if (targets.includes("opencode")) {
+    const opencodeResult = uninstallOpenCodeHook();
+    config.hooks.enabled.opencode = false;
+    if (opencodeResult.scriptPath || opencodeResult.removed || opencodeResult.configUpdated) {
+      removed.push({
+        cli: "opencode",
+        path: opencodeResult.scriptPath,
+        configPath: opencodeResult.configPath,
+        removed: opencodeResult.removed,
+      });
+    }
+  }
+
   if (options["remove-config"]) {
     const configPath = getConfigPath();
     if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
@@ -396,7 +461,7 @@ function handleStatus(options) {
     console.log(`Storage: ${status.storage}`);
     console.log(`SQLite: ${status.sqlitePath}`);
     console.log(`Capture response: ${status.captureResponse ? "on" : "off"}`);
-    console.log(`Hooks: claude=${hooks.claude_code ? "installed" : "not installed"}, codex=${hooks.codex ? "installed" : "not installed"}`);
+    console.log(`Hooks: claude=${hooks.claude_code ? "installed" : "not installed"}, codex=${hooks.codex ? "installed" : "not installed"}, opencode=${hooks.opencode ? "installed" : "not installed"}`);
     console.log(`Last capture: ${status.lastCapture || "none"}`);
     console.log(`Queue: ${queueStats.count} files, ${queueStats.bytes} bytes`);
     if (state.lastReplay) {
@@ -681,6 +746,68 @@ async function handleSyncFlush(options) {
   }
 }
 
+function handleSyncAuto(options, positional) {
+  const { startDaemon, stopDaemon, daemonStatus } = require("./auto-sync");
+  const config = loadConfig();
+  const subAction = positional[0];
+
+  if (subAction === "stop") {
+    const result = stopDaemon();
+    if (options.json) {
+      printJson(result);
+    } else if (result.stopped && result.timedOut) {
+      console.log(`Auto-sync daemon force-killed after timeout (pid ${result.pid}).`);
+    } else if (result.stopped) {
+      console.log(`Auto-sync daemon stopped (pid ${result.pid}).`);
+    } else {
+      console.log("Auto-sync daemon is not running.");
+    }
+    return;
+  }
+
+  if (subAction === "status") {
+    const status = daemonStatus();
+    if (options.json) {
+      printJson(status);
+    } else {
+      if (status.running) {
+        console.log(`Auto-sync daemon: running (pid ${status.pid})`);
+      } else {
+        console.log("Auto-sync daemon: not running");
+      }
+      console.log(`Last sync: ${status.lastSyncTime || "never"}`);
+      console.log(`PID file: ${status.pidFile}`);
+      console.log(`Log file: ${status.logFile}`);
+    }
+    return;
+  }
+
+  // Default: start the daemon
+  const result = startDaemon(config);
+
+  // Persist sync.auto=true on successful start (consistent across output modes)
+  if (result.started) {
+    config.sync.auto = true;
+    saveConfig(config);
+  }
+
+  if (options.json) {
+    printJson(result);
+  } else if (result.alreadyRunning) {
+    console.log(`Auto-sync daemon already running (pid ${result.pid}).`);
+  } else if (result.started) {
+    console.log(`Auto-sync daemon started (pid ${result.pid}).`);
+    console.log(`Debounce: ${config.sync.debounce || 30}s, interval: ${config.sync.interval || 300}s`);
+  } else if (result.errors && result.errors.length) {
+    console.error("Failed to start auto-sync daemon:");
+    result.errors.forEach((err) => console.error(`  - ${err}`));
+    process.exitCode = 1;
+  } else {
+    console.error("Failed to start auto-sync daemon.");
+    process.exitCode = 1;
+  }
+}
+
 async function handleIngest(options) {
   const config = loadConfig();
   if (options.replay) {
@@ -742,7 +869,7 @@ async function main() {
     --server <url>    Server URL
     --token <token>   Authentication token
     --device <name>   Device name (default: hostname)
-    --hooks <targets> Comma-separated: claude,codex,all,none
+    --hooks <targets> Comma-separated: claude,codex,opencode,all,none
     --no-hooks        Skip hook installation
     --skip-validate   Skip server token validation
     --yes, -y         Non-interactive mode, accept all defaults
@@ -759,13 +886,13 @@ async function main() {
     case "install": {
       if (options.help || options.h) {
         console.log(`
-  omp install — Install hooks for Claude Code / Codex
+  omp install — Install hooks for Claude Code / Codex / OpenCode
 
   USAGE
     omp install [options]
 
   OPTIONS
-    --cli <targets>           Comma-separated: claude,codex,all (default: auto-detect)
+    --cli <targets>           Comma-separated: claude,codex,opencode,all (default: auto-detect)
     --server <url>            Server URL
     --token <token>           Authentication token
     --sqlite-path <path>      Custom SQLite database path
@@ -791,6 +918,12 @@ async function main() {
           if (item.cli === "codex" && item.configured) {
             console.log(`Codex config updated at ${item.configPath}`);
           }
+          if (item.cli === "opencode" && item.conflict) {
+            console.log("OpenCode config 'plugin' is not an array. Please update ~/.config/opencode/opencode.json manually.");
+          }
+          if (item.cli === "opencode" && item.configured) {
+            console.log(`OpenCode config updated at ${item.configPath}`);
+          }
         });
       }
       break;
@@ -804,7 +937,7 @@ async function main() {
     omp uninstall [options]
 
   OPTIONS
-    --cli <targets>    Comma-separated: claude,codex (default: auto-detect)
+    --cli <targets>    Comma-separated: claude,codex,opencode (default: auto-detect)
     --all              Full uninstall: remove hooks, config, and data
     --hooks-only       With --all: only remove hooks, keep config and data
     --remove-config    Remove config file (without --all)
@@ -894,6 +1027,27 @@ async function main() {
         handleSyncStatus(options);
       } else if (positional[0] === "flush") {
         await handleSyncFlush(options);
+      } else if (positional[0] === "auto") {
+        if (options.help || options.h) {
+          console.log(`
+  omp sync auto — Background auto-sync daemon
+
+  USAGE
+    omp sync auto              Start auto-sync daemon
+    omp sync auto stop         Stop auto-sync daemon
+    omp sync auto status       Show auto-sync daemon status
+
+  CONFIG
+    sync.auto        boolean   Enable/disable auto-sync (default: false)
+    sync.debounce    number    Debounce delay in seconds (default: 30)
+    sync.interval    number    Max interval between syncs in seconds (default: 300)
+
+  OPTIONS
+    --json    Output as JSON
+`);
+          break;
+        }
+        handleSyncAuto(options, positional.slice(1));
       } else {
         if (options.help || options.h) {
           console.log(`
@@ -905,6 +1059,7 @@ async function main() {
   SUBCOMMANDS
     omp sync status    Show sync checkpoint and recent runs
     omp sync flush     Delete ALL server-side records (destructive)
+    omp sync auto      Manage background auto-sync daemon
 
   OPTIONS
     --force            Override sync lock

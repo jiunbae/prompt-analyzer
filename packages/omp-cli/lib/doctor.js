@@ -32,6 +32,15 @@ function validateConfig(config) {
     warnings.push("No deviceId configured (defaults to hostname)");
   }
 
+  // Validate sync timing config
+  try {
+    const { validateTimingConfig } = require("./auto-sync");
+    const timing = validateTimingConfig(config.sync?.debounce, config.sync?.interval);
+    errors.push(...timing.errors);
+  } catch {
+    // auto-sync module not available, skip timing validation
+  }
+
   return { ok: errors.length === 0, errors, warnings };
 }
 
@@ -73,12 +82,37 @@ function runDoctor(config) {
   if (config.hooks?.enabled?.codex && !hooks.codex) {
     report.warnings.push("Codex hook enabled in config but not installed");
   }
+  if (config.hooks?.enabled?.opencode && !hooks.opencode) {
+    report.warnings.push("OpenCode hook enabled in config but not installed");
+  }
 
   // Sync status
   try {
     report.checks.sync = getSyncStatus(config, 1);
   } catch (error) {
     report.warnings.push("sync status unavailable");
+  }
+
+  // Auto-sync daemon status
+  try {
+    const { isDaemonRunning, getLastSyncTime } = require("./auto-sync");
+    const daemonState = isDaemonRunning();
+    const lastSync = getLastSyncTime();
+
+    report.checks.autoSync = {
+      enabled: !!config.sync?.auto,
+      running: daemonState.running,
+      pid: daemonState.pid,
+      lastSyncTime: lastSync,
+    };
+
+    if (config.sync?.auto && !daemonState.running) {
+      report.warnings.push(
+        "Auto-sync is enabled but daemon is not running. Start with: omp sync auto"
+      );
+    }
+  } catch {
+    // auto-sync module not available, skip
   }
 
   report.ok = report.errors.length === 0;

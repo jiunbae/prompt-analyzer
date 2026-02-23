@@ -82,6 +82,9 @@ function runDoctor(config) {
   if (config.hooks?.enabled?.codex && !hooks.codex) {
     report.warnings.push("Codex hook enabled in config but not installed");
   }
+  if (config.hooks?.enabled?.opencode && !hooks.opencode) {
+    report.warnings.push("OpenCode hook enabled in config but not installed");
+  }
 
   // Sync status
   try {

@@ -6,11 +6,11 @@
 [![Node.js](https://img.shields.io/node/v/oh-my-prompt.svg)](https://nodejs.org)
 [![License](https://img.shields.io/npm/l/oh-my-prompt.svg)](LICENSE)
 
-**Oh My Prompt** captures your AI coding sessions (Claude Code, Codex, etc.) to a local SQLite database, syncs them to a server, and provides analytics insights into your prompting patterns.
+**Oh My Prompt** captures your AI coding sessions (Claude Code, Codex, OpenCode, etc.) to a local SQLite database, syncs them to a server, and provides analytics insights into your prompting patterns.
 
 ## Features
 
-- **Automatic capture**: Hook into Claude Code, Codex via shell scripts
+- **Automatic capture**: Hook into Claude Code, Codex, and OpenCode
 - **Local storage**: SQLite database at `~/.omp/prompts.db`
 - **Server sync**: Upload prompts to self-hosted server for analytics
 - **Prompt analysis**: Get quality scores and improvement suggestions
@@ -55,7 +55,7 @@ omp setup
 This will:
 - Create config at `~/.omp/config.json`
 - Initialize SQLite database
-- Detect installed CLIs (Claude, Codex)
+- Detect installed CLIs (Claude, Codex, OpenCode)
 - Optionally configure server sync
 
 ### 2. Install Hooks
@@ -65,12 +65,14 @@ Install hooks for your CLI(s):
 ```bash
 omp install claude      # For Claude Code
 omp install codex       # For Codex
-omp install all         # For both
+omp install opencode    # For OpenCode
+omp install all         # For all detected CLIs
 ```
 
 This adds prompt capture hooks to:
-- Claude: `~/.claude/hooks/prompt_sent.sh`
-- Codex: `~/.codex/notify.js` (or merges with existing)
+- Claude: `~/.claude/hooks/prompt-logger.sh`
+- Codex: `~/.config/oh-my-prompt/hooks/codex/notify.js` + `~/.codex/config.toml` notify entry
+- OpenCode: `~/.config/oh-my-prompt/hooks/opencode/omp-opencode-plugin.mjs` + `~/.config/opencode/opencode.json` plugin entry
 
 ### 3. Verify Setup
 
@@ -84,17 +86,18 @@ Server: https://your-server.example.com (or not configured)
 Token: configured / not configured
 Storage: sqlite
 SQLite: /Users/you/.omp/prompts.db
-Hooks: claude=installed, codex=installed
+Hooks: claude=installed, codex=installed, opencode=installed
 Last capture: 2026-02-08T10:30:00.000Z
 Queue: 0 files, 0 bytes
 ```
 
 ### 4. Use Your CLI
 
-Just use Claude Code or Codex normally:
+Just use Claude Code, Codex, or OpenCode normally:
 ```bash
 claude "Write a function to parse TOML"
 codex "Add error handling to this file"
+opencode run "Add retry logic to the sync command"
 ```
 
 Prompts are automatically captured!
@@ -112,7 +115,7 @@ omp analyze <prompt-id>
 Copy-paste this prompt into your coding agent to install Oh My Prompt with interactive setup:
 
 ```text
-Install Oh My Prompt on this machine.
+Install Oh My Prompt from https://github.com/jiunbae/oh-my-prompt on this machine.
 
 Before running commands, ask me to choose only the install method:
 1) npm install -g oh-my-prompt (recommended)
@@ -139,8 +142,8 @@ Finally, show exactly what was configured (hooks, server URL, and token status).
 ### Hook Management
 
 ```bash
-omp install [claude|codex|all]    # Install prompt capture hooks
-omp uninstall [claude|codex|all]  # Remove hooks
+omp install [claude|codex|opencode|all]    # Install prompt capture hooks
+omp uninstall [claude|codex|opencode|all]  # Remove hooks
 omp status                         # Show config and hook status
 omp doctor                         # Validate setup and diagnose issues
 ```
@@ -257,9 +260,14 @@ export OMP_CAPTURE_RESPONSE="true"
 - Reads env vars: `$CLAUDE_PROMPT`, `$CLAUDE_RESPONSE`, `$CLAUDE_SESSION_ID`
 
 **Codex**:
-- Adds/updates `~/.codex/notify.js`
+- Adds/updates `notify` in `~/.codex/config.toml`
 - Triggered on `agent-turn-complete` events
 - Parses Codex event JSON
+
+**OpenCode**:
+- Adds a plugin path in `~/.config/opencode/opencode.json`
+- Plugin listens to `session.idle` events
+- Captures the latest user/assistant turn pair per session
 
 ### Custom Hook Environment
 
@@ -495,5 +503,5 @@ MIT © Jiun Bae
 ## Acknowledgments
 
 - Inspired by oh-my-zsh and prompt engineering best practices
-- Built for Claude Code and Codex users
+- Built for Claude Code, Codex, and OpenCode users
 - Uses better-sqlite3 for fast local storage

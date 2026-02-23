@@ -38,6 +38,9 @@ function defaultConfig() {
     },
     sync: {
       enabled: false,
+      auto: false,
+      debounce: 30,
+      interval: 300,
       userToken: "",
       deviceId: "",
       // Redact only when uploading to server (default ON).

@@ -4,6 +4,7 @@ const { openDb, nowIso, hashContent } = require("./db");
 const { enqueuePayload, getQueueStats } = require("./queue");
 const { updateState } = require("./state");
 const { redactText } = require("./redact");
+const { touchTrigger } = require("./auto-sync");
 
 function parsePayload(raw) {
   if (!raw) return null;
@@ -192,6 +193,7 @@ function ingestPayload(rawPayload, config) {
           record.word_count
         );
         updateState({ lastCapture: record.created_at });
+        touchTrigger();
         return { ok: true, id: row.id, updated: true };
       }
     }
@@ -210,11 +212,13 @@ function ingestPayload(rawPayload, config) {
           record.token_estimate_response,
           record.word_count_response
         );
+        touchTrigger();
         return { ok: true, id: existing.id, updated: true, deduped: true };
       }
       return { ok: true, id: existing?.id || record.id, updated: false, deduped: true };
     }
     updateState({ lastCapture: record.created_at });
+    touchTrigger();
     return { ok: true, id: record.id, updated: false };
   } catch (error) {
     const raw = typeof rawPayload === "string" ? rawPayload : JSON.stringify(payload);

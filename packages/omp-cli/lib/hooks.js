@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { pathToFileURL } = require("url");
 const { ensureDir, getHooksDir } = require("./paths");
 const { parseTomlValue, findTomlLine, setTomlLine, removeTomlLine } = require("./toml");
 
@@ -165,10 +166,14 @@ if (!inputMessages && !responseText) {
   process.exit(0);
 }
 
+const threadId = event["thread-id"] || event.thread_id || "";
+const turnId = event["turn-id"] || event.turn_id || "";
+
 const payload = {
   timestamp: new Date().toISOString(),
+  event_id: turnId ? "codex:" + threadId + ":" + turnId : undefined,
   source: "codex",
-  session_id: event["thread-id"] || event.thread_id || "",
+  session_id: threadId,
   project: event.project || "",
   cwd: event.cwd || "",
   role: "user",
@@ -212,16 +217,22 @@ try {
   chain = null;
 }
 
-function runCommand(cmdArray) {
-  if (!Array.isArray(cmdArray) || cmdArray.length === 0) return;
+function runCommand(cmdSpec) {
   try {
-    spawnSync(cmdArray[0], cmdArray.slice(1).concat([raw]), { stdio: "ignore" });
+    if (Array.isArray(cmdSpec) && cmdSpec.length > 0) {
+      spawnSync(cmdSpec[0], cmdSpec.slice(1).concat([raw]), { stdio: "ignore" });
+      return;
+    }
+    if (typeof cmdSpec === "string" && cmdSpec.trim()) {
+      // Preserve string notify commands by running via sh -lc and passing raw as $1.
+      spawnSync("sh", ["-lc", cmdSpec, "omp-codex-notify", raw], { stdio: "ignore" });
+    }
   } catch (error) {
     // ignore
   }
 }
 
-if (chain && Array.isArray(chain.original)) {
+if (chain && (Array.isArray(chain.original) || typeof chain.original === "string")) {
   runCommand(chain.original);
 }
 
@@ -330,9 +341,177 @@ function getCodexChainPath() {
   return path.join(getHooksDir(), "codex", "notify-chain.json");
 }
 
+function getOpenCodeConfigDir() {
+  if (process.env.OPENCODE_CONFIG_HOME) return process.env.OPENCODE_CONFIG_HOME;
+  const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  return path.join(base, "opencode");
+}
+
+function getOpenCodeConfigPath() {
+  return path.join(getOpenCodeConfigDir(), "opencode.json");
+}
+
+function getOpenCodePluginPath() {
+  return path.join(getHooksDir(), "opencode", "omp-opencode-plugin.mjs");
+}
+
+function getOpenCodePluginCandidates(scriptPath) {
+  const candidates = new Set([scriptPath]);
+  try {
+    candidates.add(pathToFileURL(scriptPath).href);
+  } catch {
+    // ignore
+  }
+  return candidates;
+}
+
+function hasOpenCodePlugin(pluginEntries, scriptPath) {
+  if (!Array.isArray(pluginEntries)) return false;
+  const candidates = getOpenCodePluginCandidates(scriptPath);
+  return pluginEntries.some((entry) => typeof entry === "string" && candidates.has(entry));
+}
+
 function buildNotifyLine(cmdArray) {
   // Codex config.toml expects notify as a string command
   return `"${cmdArray.join(" ")}"`;
+}
+
+function opencodePluginScript() {
+  return `import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+function normalizeResponse(response) {
+  if (response && typeof response === "object" && "data" in response && response.data != null) {
+    return response.data;
+  }
+  return response;
+}
+
+function extractText(parts, role) {
+  if (!Array.isArray(parts)) return "";
+  const chunks = [];
+  for (const part of parts) {
+    if (!part || typeof part !== "object") continue;
+    if (part.type === "text" && typeof part.text === "string" && part.text.trim()) {
+      if (part.synthetic) continue;
+      chunks.push(part.text.trim());
+      continue;
+    }
+    if (role === "assistant" && part.type === "tool_result") {
+      if (typeof part.content === "string" && part.content.trim()) {
+        chunks.push(part.content.trim());
+        continue;
+      }
+      if (Array.isArray(part.content)) {
+        const text = part.content
+          .map((item) => {
+            if (typeof item === "string") return item;
+            if (item && typeof item === "object" && typeof item.text === "string") return item.text;
+            return "";
+          })
+          .filter(Boolean)
+          .join("\\n");
+        if (text.trim()) chunks.push(text.trim());
+      }
+    }
+  }
+  return chunks.join("\\n\\n").trim();
+}
+
+function findLatestTurn(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const assistantEntry = messages[i];
+    const assistantInfo = assistantEntry && assistantEntry.info;
+    if (!assistantInfo || assistantInfo.role !== "assistant") continue;
+
+    const assistantText = extractText(assistantEntry.parts, "assistant");
+    if (!assistantText) continue;
+
+    for (let j = i - 1; j >= 0; j -= 1) {
+      const userEntry = messages[j];
+      const userInfo = userEntry && userEntry.info;
+      if (!userInfo || userInfo.role !== "user") continue;
+
+      const userText = extractText(userEntry.parts, "user");
+      if (!userText) continue;
+      if (assistantInfo.parentID && assistantInfo.parentID !== userInfo.id) continue;
+
+      return { userEntry, assistantEntry, userText, assistantText };
+    }
+  }
+
+  return null;
+}
+
+export default async function OhMyPromptOpenCodePlugin(ctx) {
+  return {
+    event: async ({ event }) => {
+      if (!event || event.type !== "session.idle") return;
+      const sessionID = event.properties && event.properties.sessionID;
+      if (!sessionID) return;
+
+      let messagesResp;
+      try {
+        messagesResp = await ctx.client.session.messages({ path: { id: sessionID } });
+      } catch {
+        return;
+      }
+
+      const messages = normalizeResponse(messagesResp);
+      const latest = findLatestTurn(messages);
+      if (!latest) return;
+
+      const { userEntry, assistantEntry, userText, assistantText } = latest;
+      const assistantInfo = assistantEntry.info || {};
+      const userInfo = userEntry.info || {};
+
+      const cwd =
+        (assistantInfo.path && assistantInfo.path.cwd) ||
+        (userInfo.path && userInfo.path.cwd) ||
+        ctx.directory ||
+        process.cwd();
+      const root =
+        (assistantInfo.path && assistantInfo.path.root) ||
+        (userInfo.path && userInfo.path.root) ||
+        cwd;
+
+      const payload = {
+        timestamp: new Date().toISOString(),
+        event_id: \`opencode:\${sessionID}:\${userInfo.id || ""}:\${assistantInfo.id || ""}\`,
+        source: "opencode",
+        session_id: sessionID,
+        project: path.basename(root || cwd || ""),
+        cwd,
+        role: "user",
+        text: userText,
+        response_text: assistantText,
+        model:
+          assistantInfo.providerID && assistantInfo.modelID
+            ? \`\${assistantInfo.providerID}/\${assistantInfo.modelID}\`
+            : "",
+        cli_name: "opencode",
+        hook_version: "1.0.0",
+        capture_response: true,
+        meta: {
+          event_type: event.type,
+          user_message_id: userInfo.id || "",
+          assistant_message_id: assistantInfo.id || "",
+          agent: assistantInfo.agent || userInfo.agent || "",
+          variant: assistantInfo.variant || userInfo.variant || "",
+        },
+      };
+
+      const ompBin = process.env.OMP_BIN || "omp";
+      spawnSync(ompBin, ["ingest", "--stdin", "--source", "opencode"], {
+        input: JSON.stringify(payload),
+        encoding: "utf-8",
+      });
+    },
+  };
+}
+`;
 }
 
 function installClaudeHook() {
@@ -399,7 +578,8 @@ function ensureCodexNotifyConfig(scriptPath, wrapperPath, chainPath) {
   }
 
   const parsed = parseTomlValue(info.value);
-  if (!Array.isArray(parsed)) {
+  const mergeable = Array.isArray(parsed) || (typeof parsed === "string" && parsed.trim());
+  if (!mergeable) {
     return { configPath, configured: false, conflict: true, merged: false };
   }
 
@@ -439,8 +619,10 @@ function restoreCodexNotifyConfig(scriptPath, wrapperPath, chainPath) {
   if (fs.existsSync(chainPath)) {
     try {
       const chain = JSON.parse(fs.readFileSync(chainPath, "utf-8"));
-      if (chain && Array.isArray(chain.original)) {
-        const restoredLine = buildNotifyLine(chain.original);
+      if (chain && (Array.isArray(chain.original) || typeof chain.original === "string")) {
+        const restoredLine = Array.isArray(chain.original)
+          ? buildNotifyLine(chain.original)
+          : JSON.stringify(chain.original);
         content = setTomlLine(content, "notify", restoredLine, "");
         restored = true;
       }
@@ -508,6 +690,83 @@ function uninstallCodexHook() {
   };
 }
 
+function installOpenCodeHook() {
+  const scriptPath = getOpenCodePluginPath();
+  const configPath = getOpenCodeConfigPath();
+
+  ensureDir(path.dirname(scriptPath));
+  fs.writeFileSync(scriptPath, opencodePluginScript());
+
+  let config = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    } catch (error) {
+      throw new Error(`OpenCode config is not valid JSON: ${error.message}`);
+    }
+  }
+
+  if (!config || typeof config !== "object") {
+    throw new Error("OpenCode config has unexpected format");
+  }
+  if (!config.$schema) {
+    config.$schema = "https://opencode.ai/config.json";
+  }
+  if (config.plugin === undefined) {
+    config.plugin = [];
+  }
+  if (!Array.isArray(config.plugin)) {
+    return { scriptPath, configPath, configured: false, conflict: true };
+  }
+
+  if (!hasOpenCodePlugin(config.plugin, scriptPath)) {
+    config.plugin.push(scriptPath);
+  }
+
+  ensureDir(path.dirname(configPath));
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+
+  return { scriptPath, configPath, configured: true, conflict: false };
+}
+
+function uninstallOpenCodeHook() {
+  const scriptPath = getOpenCodePluginPath();
+  const configPath = getOpenCodeConfigPath();
+  let removed = false;
+
+  if (fs.existsSync(scriptPath)) {
+    fs.unlinkSync(scriptPath);
+    removed = true;
+  }
+
+  let configUpdated = false;
+  if (fs.existsSync(configPath)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (config && typeof config === "object" && Array.isArray(config.plugin)) {
+        const candidates = getOpenCodePluginCandidates(scriptPath);
+        const next = config.plugin.filter(
+          (item) => !(typeof item === "string" && candidates.has(item))
+        );
+        if (next.length !== config.plugin.length) {
+          config.plugin = next;
+          fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+          configUpdated = true;
+        }
+      }
+    } catch {
+      // ignore parse errors on uninstall
+    }
+  }
+
+  return {
+    scriptPath,
+    configPath,
+    removed,
+    configUpdated,
+  };
+}
+
 function listHookStatus() {
   const configPath = getCodexConfigPath();
   let codexConfigured = false;
@@ -521,10 +780,25 @@ function listHookStatus() {
     }
   }
 
+  const opencodeConfigPath = getOpenCodeConfigPath();
+  const opencodeScriptPath = getOpenCodePluginPath();
+  let opencodeConfigured = false;
+  if (fs.existsSync(opencodeConfigPath) && fs.existsSync(opencodeScriptPath)) {
+    try {
+      const opencodeConfig = JSON.parse(fs.readFileSync(opencodeConfigPath, "utf-8"));
+      if (opencodeConfig && Array.isArray(opencodeConfig.plugin)) {
+        opencodeConfigured = hasOpenCodePlugin(opencodeConfig.plugin, opencodeScriptPath);
+      }
+    } catch {
+      opencodeConfigured = false;
+    }
+  }
+
   return {
     claude_code: fs.existsSync(getClaudeHookPath()),
     claude_code_stop: fs.existsSync(getClaudeStopHookPath()),
     codex: codexConfigured,
+    opencode: opencodeConfigured,
   };
 }
 
@@ -533,5 +807,7 @@ module.exports = {
   uninstallClaudeHook,
   installCodexHook,
   uninstallCodexHook,
+  installOpenCodeHook,
+  uninstallOpenCodeHook,
   listHookStatus,
 };

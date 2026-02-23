@@ -116,11 +116,15 @@ function detectClis() {
   const targets = [];
   const home = os.homedir();
   const path = require("path");
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
   if (commandExists("claude") || fs.existsSync(path.join(home, ".claude"))) {
     targets.push("claude");
   }
   if (commandExists("codex") || fs.existsSync(path.join(home, ".codex"))) {
     targets.push("codex");
+  }
+  if (commandExists("opencode") || fs.existsSync(path.join(xdgConfigHome, "opencode"))) {
+    targets.push("opencode");
   }
   return targets;
 }
@@ -129,7 +133,7 @@ function resolveCliTargets(options) {
   if (options["no-hooks"]) return [];
   if (options.hooks) {
     if (options.hooks === "none") return [];
-    if (options.hooks === "all") return ["claude", "codex"];
+    if (options.hooks === "all") return ["claude", "codex", "opencode"];
     return options.hooks.split(",").map((s) => s.trim());
   }
   return detectClis();
@@ -433,7 +437,7 @@ async function runSetup(options) {
 
     if (cliTargets.length === 0 && !options["no-hooks"]) {
       if (interactive) {
-        output.write("  No supported CLI tools detected (claude, codex).\n");
+        output.write("  No supported CLI tools detected (claude, codex, opencode).\n");
         printResult(output, "!", "Skipping hook installation. Install hooks later with: omp install <cli>");
         output.write("\n");
       }
@@ -450,14 +454,20 @@ async function runSetup(options) {
       const {
         installClaudeHook,
         installCodexHook,
+        installOpenCodeHook,
       } = require("./hooks");
 
       for (const cli of cliTargets) {
         let shouldInstall = true;
 
         if (interactive && !options.yes && !options.y) {
+          const cliDisplayName = cli === "claude"
+            ? "Claude Code"
+            : cli === "codex"
+              ? "Codex"
+              : "OpenCode";
           shouldInstall = await prompter.confirm(
-            `Install ${cli === "claude" ? "Claude Code" : "Codex"} hook?`,
+            `Install ${cliDisplayName} hook?`,
             true
           );
         }
@@ -503,6 +513,24 @@ async function runSetup(options) {
               }
               if (codexResult.conflict) {
                 printResult(output, "!", "Codex notify is already configured by another tool.");
+              }
+            }
+          } else if (cli === "opencode") {
+            const opencodeResult = installOpenCodeHook();
+            config.hooks.enabled.opencode = opencodeResult.configured;
+            result.hooks.opencode = {
+              installed: opencodeResult.configured,
+              path: opencodeResult.scriptPath,
+              configPath: opencodeResult.configPath,
+              conflict: opencodeResult.conflict,
+            };
+            if (interactive) {
+              printResult(output, "->", `Installed: ${opencodeResult.scriptPath}`);
+              if (opencodeResult.configured) {
+                printResult(output, "->", `Updated: ${opencodeResult.configPath}`);
+              }
+              if (opencodeResult.conflict) {
+                printResult(output, "!", "OpenCode config has non-array 'plugin' field.");
               }
             }
           }
@@ -610,7 +638,7 @@ async function runSetup(options) {
           printResult(
             output,
             "  ",
-            `Hooks:   claude=${h.claude_code ? "installed" : "not installed"}, codex=${h.codex ? "installed" : "not installed"}`
+            `Hooks:   claude=${h.claude_code ? "installed" : "not installed"}, codex=${h.codex ? "installed" : "not installed"}, opencode=${h.opencode ? "installed" : "not installed"}`
           );
         }
         printResult(output, "  ", `Sync:    ${config.server.url ? "server configured" : "not configured"}`);
