@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 import { computeSimilarity } from "@/lib/prompt-diff";
+import { checkIsAdmin } from "@/lib/with-auth";
 import Link from "next/link";
 
 // Force dynamic rendering - don't pre-render at build time
@@ -25,19 +26,22 @@ async function getCurrentUser() {
   return parseSessionToken(sessionToken);
 }
 
-async function getPrompt(id: string, userId: string, isAdmin: boolean) {
+async function getPromptWithTags(id: string, userId: string, isAdmin: boolean) {
   // Admins can view any prompt; non-admins are scoped to their own prompts.
   const whereCondition = isAdmin
     ? eq(schema.prompts.id, id)
     : and(eq(schema.prompts.id, id), eq(schema.prompts.userId, userId));
 
-  const result = await db
-    .select()
-    .from(schema.prompts)
-    .where(whereCondition)
-    .limit(1);
-
-  return result[0] ?? null;
+  return db.query.prompts.findFirst({
+    where: whereCondition,
+    with: {
+      promptTags: {
+        with: {
+          tag: true,
+        },
+      },
+    },
+  }) ?? null;
 }
 
 interface SimilarPrompt {
@@ -116,25 +120,15 @@ export default async function PromptDetailPage({ params }: PromptDetailPageProps
   }
 
   const resolvedParams = await params;
+  const isAdmin = user.isAdmin ? await checkIsAdmin(user.userId) : false;
 
-  const prompt = await getPrompt(resolvedParams.id, user.userId, user.isAdmin);
+  const prompt = await getPromptWithTags(resolvedParams.id, user.userId, isAdmin);
 
   if (!prompt) {
     notFound();
   }
 
-  const promptWithTags = await db.query.prompts.findFirst({
-    where: eq(schema.prompts.id, prompt.id),
-    with: {
-      promptTags: {
-        with: {
-          tag: true,
-        },
-      },
-    },
-  });
-
-  const tags = promptWithTags?.promptTags.map(pt => pt.tag) ?? [];
+  const tags = prompt.promptTags.map(pt => pt.tag);
 
   // Parse the prompt to create a simple message structure
   const messages: Array<{
@@ -162,7 +156,7 @@ export default async function PromptDetailPage({ params }: PromptDetailPageProps
 
   const similarPrompts = await getSimilarPrompts(
     { id: prompt.id, promptText: prompt.promptText, userId: prompt.userId },
-    user.isAdmin
+    isAdmin
   );
 
   return (

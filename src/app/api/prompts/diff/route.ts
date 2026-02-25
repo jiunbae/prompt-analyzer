@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
-import { requireAuth, AuthError } from "@/lib/with-auth";
+import { requireAuth, checkIsAdmin, AuthError } from "@/lib/with-auth";
 import { computeDiff, computeSimilarity } from "@/lib/prompt-diff";
 
 export async function GET(request: NextRequest) {
@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch both prompts with ownership check (admins can see all)
-    const ownershipCondition = session.isAdmin
+    const isAdmin = session.isAdmin ? await checkIsAdmin(session.userId) : false;
+    const ownershipCondition = isAdmin
       ? inArray(schema.prompts.id, [idA, idB])
       : and(
           inArray(schema.prompts.id, [idA, idB]),

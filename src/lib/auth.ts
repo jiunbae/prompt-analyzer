@@ -4,11 +4,11 @@ import crypto from "crypto";
 const SALT_ROUNDS = 12;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET && process.env.NODE_ENV === "production" && typeof window === "undefined") {
-  // Log warning instead of throwing to avoid build-time failures.
-  // At runtime, token operations will fail safely (return null).
-  console.warn("WARNING: SESSION_SECRET is not set. Sessions will not persist across restarts.");
+  console.warn("WARNING: SESSION_SECRET is not set. Sessions will not work.");
 }
-const EFFECTIVE_SECRET = SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+// When SESSION_SECRET is missing, use empty string so token operations return null
+// (matching middleware behavior which also rejects empty secrets).
+const EFFECTIVE_SECRET = SESSION_SECRET || "";
 
 /**
  * Hash a password using bcrypt
@@ -48,6 +48,9 @@ export interface SessionPayload {
  * @returns Signed session token (payload.signature)
  */
 export function createSessionToken(payload: SessionPayload): string {
+  if (!EFFECTIVE_SECRET) {
+    throw new Error("SESSION_SECRET is not configured. Cannot create session tokens.");
+  }
   const data = JSON.stringify({
     ...payload,
     iat: Date.now(),

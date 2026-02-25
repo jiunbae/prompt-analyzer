@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { sql, eq, and } from "drizzle-orm";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { rateLimiters } from "@/lib/rate-limit";
 import { handler as enrichHandler } from "@/extensions/prompt-quality/processor";
 
 /**
@@ -143,6 +144,14 @@ export async function GET() {
 export async function POST() {
   try {
     const session = await requireAuth();
+
+    const rl = rateLimiters.llm(session.userId);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } },
+      );
+    }
 
     const now = new Date();
     const thirtyDaysAgo = new Date(now);

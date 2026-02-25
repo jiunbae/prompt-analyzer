@@ -41,6 +41,19 @@ export async function requireAdmin(): Promise<SessionPayload> {
   return session;
 }
 
+/**
+ * Check if the current session user is actually an admin via DB lookup.
+ * Returns false (not throws) if not admin — for routes that expand access for admins.
+ */
+export async function checkIsAdmin(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ isAdmin: schema.users.isAdmin })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  return row?.isAdmin ?? false;
+}
+
 export class AuthError extends Error {
   status: 401 | 403;
 

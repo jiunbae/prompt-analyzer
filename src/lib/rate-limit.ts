@@ -78,4 +78,6 @@ export const rateLimiters = {
   webhookTest: createRateLimiter(5, 60 * 1000),
   /** General API: 100 requests per minute */
   api: createRateLimiter(100, 60 * 1000),
+  /** LLM-backed endpoints: 10 requests per minute (expensive) */
+  llm: createRateLimiter(10, 60 * 1000),
 };

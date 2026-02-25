@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { rateLimiters } from "@/lib/rate-limit";
 import {
   getCachedInsight,
   getUserInsights,
@@ -48,6 +49,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAuth();
+
+    const rl = rateLimiters.llm(session.userId);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } },
+      );
+    }
 
     const body = await request.json();
     const { type, dateRange } = body as {

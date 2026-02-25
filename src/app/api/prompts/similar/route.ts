@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, ne, sql } from "drizzle-orm";
-import { requireAuth, AuthError } from "@/lib/with-auth";
+import { requireAuth, checkIsAdmin, AuthError } from "@/lib/with-auth";
 import { computeSimilarity } from "@/lib/prompt-diff";
 
 export async function GET(request: NextRequest) {
@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch the source prompt
-    const ownershipCondition = session.isAdmin
+    const isAdmin = session.isAdmin ? await checkIsAdmin(session.userId) : false;
+    const ownershipCondition = isAdmin
       ? eq(schema.prompts.id, id)
       : and(eq(schema.prompts.id, id), eq(schema.prompts.userId, session.userId));
 
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
     const searchText = words.join(" ");
 
     // Build ownership filter for candidates
-    const userFilter = session.isAdmin
+    const userFilter = isAdmin
       ? sql`TRUE`
       : sql`${schema.prompts.userId} = ${session.userId}`;
 

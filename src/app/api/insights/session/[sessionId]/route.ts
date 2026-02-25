@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { rateLimiters } from "@/lib/rate-limit";
 import { handler as sessionStoryHandler } from "@/extensions/session-story/processor";
 import {
   getCachedInsight,
@@ -15,6 +16,14 @@ export async function GET(
 ) {
   try {
     const session = await requireAuth();
+
+    const rl = rateLimiters.llm(session.userId);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } },
+      );
+    }
 
     const { sessionId } = await params;
     if (!sessionId) {
