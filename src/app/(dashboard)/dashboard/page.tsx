@@ -1,21 +1,15 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MiniActivityChart } from "@/components/charts/mini-activity-chart";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { getSessionUser } from "@/lib/with-auth";
 import { getDashboardData } from "@/lib/dashboard";
 import { formatNumber } from "@/lib/analytics";
 import { InsightCards } from "@/components/insights/insight-cards";
 
 export const dynamic = "force-dynamic";
 
-async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!sessionToken) return null;
-  return parseSessionToken(sessionToken);
-}
+const getCurrentUser = getSessionUser;
 
 function getGreeting(): string {
   const hour = new Date().getHours();

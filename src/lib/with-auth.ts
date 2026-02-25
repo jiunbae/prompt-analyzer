@@ -54,6 +54,17 @@ export async function checkIsAdmin(userId: string): Promise<boolean> {
   return row?.isAdmin ?? false;
 }
 
+/**
+ * Get the current user from the session cookie without throwing.
+ * For use in server components that redirect on null instead of throwing.
+ */
+export async function getSessionUser(): Promise<SessionPayload | null> {
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  if (!sessionToken) return null;
+  return parseSessionToken(sessionToken);
+}
+
 export class AuthError extends Error {
   status: 401 | 403;
 

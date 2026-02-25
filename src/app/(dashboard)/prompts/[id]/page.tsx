@@ -3,28 +3,14 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, ne, sql } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 import { computeSimilarity } from "@/lib/prompt-diff";
-import { checkIsAdmin } from "@/lib/with-auth";
+import { checkIsAdmin, getSessionUser } from "@/lib/with-auth";
 import Link from "next/link";
 
 // Force dynamic rendering - don't pre-render at build time
 export const dynamic = "force-dynamic";
 
-/**
- * Get current user from session cookie
- */
-async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-  if (!sessionToken) {
-    return null;
-  }
-
-  return parseSessionToken(sessionToken);
-}
+const getCurrentUser = getSessionUser;
 
 async function getPromptWithTags(id: string, userId: string, isAdmin: boolean) {
   // Admins can view any prompt; non-admins are scoped to their own prompts.
@@ -120,7 +106,7 @@ export default async function PromptDetailPage({ params }: PromptDetailPageProps
   }
 
   const resolvedParams = await params;
-  const isAdmin = user.isAdmin ? await checkIsAdmin(user.userId) : false;
+  const isAdmin = await checkIsAdmin(user.userId);
 
   const prompt = await getPromptWithTags(resolvedParams.id, user.userId, isAdmin);
 

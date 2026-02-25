@@ -61,6 +61,20 @@ const isAuthed = t.middleware(({ ctx, next }) => {
   });
 });
 
+const isAdmin = t.middleware(({ ctx, next }) => {
+  if (!ctx.user) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+  if (!ctx.user.isAdmin) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+  }
+  return next({
+    ctx: {
+      user: ctx.user,
+    },
+  });
+});
+
 /**
  * Export reusable router and procedure helpers
  */
@@ -68,3 +82,4 @@ export const createTRPCRouter = t.router;
 export const createCallerFactory = t.createCallerFactory;
 export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(isAuthed);
+export const adminProcedure = t.procedure.use(isAdmin);

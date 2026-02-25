@@ -10,7 +10,11 @@ function getInstance(): PostgresJsDatabase<typeof schema> {
     if (!connectionString) {
       throw new Error("DATABASE_URL environment variable is not set");
     }
-    const client = postgres(connectionString, { max: 20 });
+    const client = postgres(connectionString, {
+      max: 20,
+      idle_timeout: 30,
+      connect_timeout: 10,
+    });
     _instance = drizzle(client, { schema });
   }
   return _instance;

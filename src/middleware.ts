@@ -150,6 +150,9 @@ export async function middleware(request: NextRequest) {
 
   // Add user info to request headers for downstream use
   const requestHeaders = new Headers(request.headers);
+  // Strip any client-supplied values before injecting authenticated ones
+  requestHeaders.delete("x-user-id");
+  requestHeaders.delete("x-user-email");
   // Used by tRPC context (src/server/trpc.ts)
   requestHeaders.set("x-user-id", session.userId);
   requestHeaders.set("x-user-email", session.email);

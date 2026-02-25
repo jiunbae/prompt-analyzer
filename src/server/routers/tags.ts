@@ -1,24 +1,21 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "../trpc";
+import { TRPCError } from "@trpc/server";
+import { createTRPCRouter, protectedProcedure, adminProcedure } from "../trpc";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 export const tagsRouter = createTRPCRouter({
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: protectedProcedure.query(async () => {
     return await db
       .select()
       .from(schema.tags)
       .orderBy(schema.tags.name);
   }),
 
-  create: protectedProcedure
+  create: adminProcedure
     .input(z.object({ name: z.string().min(1), color: z.string().optional() }))
-    .mutation(async ({ input, ctx }) => {
-      if (!ctx.user.isAdmin) {
-        throw new Error("Admin access required to create tags");
-      }
-
+    .mutation(async ({ input }) => {
       const [tag] = await db
         .insert(schema.tags)
         .values({
@@ -33,13 +30,9 @@ export const tagsRouter = createTRPCRouter({
       return tag;
     }),
 
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ input, ctx }) => {
-      if (!ctx.user.isAdmin) {
-        throw new Error("Admin access required to delete tags");
-      }
-
+    .mutation(async ({ input }) => {
       await db.delete(schema.tags).where(eq(schema.tags.id, input.id));
       return { success: true };
     }),
@@ -47,8 +40,6 @@ export const tagsRouter = createTRPCRouter({
   assignToPrompt: protectedProcedure
     .input(z.object({ promptId: z.string().uuid(), tagId: z.string().uuid() }))
     .mutation(async ({ input, ctx }) => {
-
-      
       const [prompt] = await db
         .select()
         .from(schema.prompts)
@@ -56,7 +47,7 @@ export const tagsRouter = createTRPCRouter({
         .limit(1);
 
       if (!prompt) {
-        throw new Error("Prompt not found or access denied");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Prompt not found or access denied" });
       }
 
       await db
@@ -73,8 +64,6 @@ export const tagsRouter = createTRPCRouter({
   removeFromPrompt: protectedProcedure
     .input(z.object({ promptId: z.string().uuid(), tagId: z.string().uuid() }))
     .mutation(async ({ input, ctx }) => {
-
-      
       const [prompt] = await db
         .select()
         .from(schema.prompts)
@@ -82,7 +71,7 @@ export const tagsRouter = createTRPCRouter({
         .limit(1);
 
       if (!prompt) {
-        throw new Error("Prompt not found or access denied");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Prompt not found or access denied" });
       }
 
       await db

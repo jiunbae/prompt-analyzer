@@ -1,7 +1,6 @@
 import { SessionCard } from "@/components/session-card";
 import { SessionFilters } from "@/components/session-filters";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { getSessionUser } from "@/lib/with-auth";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
@@ -21,12 +20,7 @@ interface SearchParams {
   to?: string;
 }
 
-async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!sessionToken) return null;
-  return parseSessionToken(sessionToken);
-}
+const getCurrentUser = getSessionUser;
 
 interface SessionRow {
   session_id: string;

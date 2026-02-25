@@ -1,8 +1,7 @@
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { cookies } from "next/headers";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { checkIsAdmin, getSessionUser } from "@/lib/with-auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -12,12 +11,7 @@ import { SessionStoryButton } from "@/components/insights/session-story-button";
 
 export const dynamic = "force-dynamic";
 
-async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!sessionToken) return null;
-  return parseSessionToken(sessionToken);
-}
+const getCurrentUser = getSessionUser;
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -53,7 +47,9 @@ export default async function SessionDetailPage({ params }: SessionDetailPagePro
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const sessionConditions = user.isAdmin
+  const isAdmin = await checkIsAdmin(user.userId);
+
+  const sessionConditions = isAdmin
     ? eq(schema.prompts.sessionId, sessionId)
     : and(eq(schema.prompts.userId, user.userId), eq(schema.prompts.sessionId, sessionId));
 

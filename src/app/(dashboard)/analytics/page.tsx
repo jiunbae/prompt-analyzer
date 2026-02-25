@@ -1,29 +1,16 @@
-import { cookies } from "next/headers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { TokenUsageChart } from "@/components/charts/token-usage-chart";
 import { ProjectActivityChart } from "@/components/charts/project-activity-chart";
 import { SessionChart } from "@/components/charts/session-chart";
-import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { getSessionUser } from "@/lib/with-auth";
 import { getAnalytics, formatNumber } from "@/lib/analytics";
 
 // Force dynamic rendering - don't pre-render at build time
 export const dynamic = "force-dynamic";
 
-/**
- * Get current user from session cookie
- */
-async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-  if (!sessionToken) {
-    return null;
-  }
-
-  return parseSessionToken(sessionToken);
-}
+const getCurrentUser = getSessionUser;
 
 
 function formatDate(date: Date): string {

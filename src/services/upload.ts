@@ -213,6 +213,7 @@ export async function processUpload(
           .insert(schema.prompts)
           .values(chunk)
           .onConflictDoNothing({ target: schema.prompts.eventKey });
+        accepted += chunk.length;
       } catch (error) {
         // If batch insert fails, fall back to individual inserts for this chunk
         // so we can pinpoint the failing records
@@ -222,10 +223,10 @@ export async function processUpload(
               .insert(schema.prompts)
               .values(chunk[j])
               .onConflictDoNothing({ target: schema.prompts.eventKey });
+            accepted++;
           } catch (innerError) {
             const item = toInsert[i + j];
             rejected++;
-            accepted--; // offset the increment below
             errors.push(
               `Error processing record ${item.record.event_id}: ${innerError instanceof Error ? innerError.message : "Unknown error"}`,
             );
@@ -237,7 +238,6 @@ export async function processUpload(
     for (const item of toInsert) {
       affectedDates.add(item.dateStr);
     }
-    accepted += toInsert.length;
   }
 
   // ── Phase 6: Refresh daily analytics ───────────────────────────

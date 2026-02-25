@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, AuthError } from "@/lib/with-auth";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
-import { desc, eq, and, gte, lte, sql } from "drizzle-orm";
+import { desc, eq, and, gte, lte, sql, inArray } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
       ]);
 
     // Look up user info for each prompt
-    const userIds = [...new Set(items.map((i) => i.userId).filter(Boolean))];
+    const userIds = [...new Set(items.map((i) => i.userId).filter((id): id is string => !!id))];
     const userMap = new Map<string, { name: string | null; email: string }>();
     if (userIds.length > 0) {
       const users = await db
@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
           email: schema.users.email,
         })
         .from(schema.users)
-        .where(sql`${schema.users.id} IN ${userIds}`);
+        .where(inArray(schema.users.id, userIds));
       for (const u of users) {
         userMap.set(u.id, { name: u.name, email: u.email });
       }
