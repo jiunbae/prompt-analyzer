@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { sql, eq, and } from "drizzle-orm";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { rateLimiters } from "@/lib/rate-limit";
 import { handler as enrichHandler } from "@/extensions/prompt-quality/processor";
 
@@ -129,7 +130,7 @@ export async function GET() {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Quality insights API error:", error);
+    logger.error({ err: error }, "Quality insights API error");
     return NextResponse.json(
       { error: "Failed to load quality insights" },
       { status: 500 },
@@ -170,7 +171,7 @@ export async function POST() {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Quality enrichment trigger error:", error);
+    logger.error({ err: error }, "Quality enrichment trigger error");
     return NextResponse.json(
       { error: "Failed to run enrichment" },
       { status: 500 },

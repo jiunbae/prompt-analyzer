@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { rateLimiters } from "@/lib/rate-limit";
 import {
   getCachedInsight,
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Insights GET error:", error);
+    logger.error({ err: error }, "Insights GET error");
     return NextResponse.json(
       { error: "Failed to load insights" },
       { status: 500 },
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Insights POST error:", error);
+    logger.error({ err: error }, "Insights POST error");
     return NextResponse.json(
       { error: "Failed to generate insight" },
       { status: 500 },

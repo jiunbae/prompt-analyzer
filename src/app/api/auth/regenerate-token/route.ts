@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { rateLimiters } from "@/lib/rate-limit";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
@@ -46,7 +47,7 @@ export async function POST() {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Token regeneration error:", error);
+    logger.error({ err: error }, "Token regeneration error");
     return NextResponse.json(
       { error: "Failed to regenerate token" },
       { status: 500 }

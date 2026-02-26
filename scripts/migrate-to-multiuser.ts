@@ -94,13 +94,8 @@ function getAdminEmail(): string {
 const ADMIN_EMAIL = getAdminEmail();
 
 function generatePassword(): string {
-  const chars =
-    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%";
-  let password = "";
-  for (let i = 0; i < 16; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return password;
+  const { randomBytes } = require("crypto");
+  return randomBytes(16).toString("base64url");
 }
 
 async function main() {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { parseDateRange } from "../_helpers";
 import { computeSessions } from "@/lib/session-analysis";
 import { db } from "@/db/client";
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Analytics sessions API error:", error);
+    logger.error({ err: error }, "Analytics sessions API error");
     return NextResponse.json(
       { error: "Failed to load sessions analytics" },
       { status: 500 }

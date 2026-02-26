@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { findUserById } from "@/lib/auth";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await requireAuth();
 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Auth check error:", error);
+    logger.error({ err: error }, "Auth check error");
     return NextResponse.json(
       { error: "An error occurred checking authentication" },
       { status: 500 }

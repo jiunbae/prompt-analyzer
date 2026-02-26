@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import crypto from "crypto";
 import { z } from "zod";
 
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Share POST error:", error);
+    logger.error({ err: error }, "Share POST error");
     return NextResponse.json({ error: "Failed to create share link" }, { status: 500 });
   }
 }
@@ -101,7 +102,7 @@ export async function GET() {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Share GET error:", error);
+    logger.error({ err: error }, "Share GET error");
     return NextResponse.json({ error: "Failed to fetch shares" }, { status: 500 });
   }
 }
@@ -145,7 +146,7 @@ export async function DELETE(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Share DELETE error:", error);
+    logger.error({ err: error }, "Share DELETE error");
     return NextResponse.json({ error: "Failed to revoke share" }, { status: 500 });
   }
 }

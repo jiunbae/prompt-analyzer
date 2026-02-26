@@ -103,30 +103,13 @@ Local SQLite → server API<br/>Works offline, syncs when ready
 <div><img src="https://quickstart-for-agents.vercel.app/api/header.svg?theme=opencode&title=Install+Oh+My+Prompt&lang=Agents" width="100%" /></div>
 
 ```text
-Install Oh My Prompt from https://github.com/jiunbae/oh-my-prompt on this machine.
+Install and set up Oh My Prompt (https://github.com/jiunbae/oh-my-prompt).
 
-Before running commands, ask me to choose one install method:
-1) npm install -g oh-my-prompt (recommended)
-2) npx oh-my-prompt setup (no global install)
-3) source install (git clone + pnpm install + pnpm build:cli + npm link)
+npm install -g oh-my-prompt && omp setup
 
-After installation, run:
-  omp setup
-
-Important:
-- Use interactive setup only.
-- Do NOT use setup flags like --server, --token, --hooks, --yes, or --dry-run.
-- Ask me each setup input in order:
-  server URL, auth/login or token, device name, and hook installs (Claude/Codex/OpenCode).
-
-After setup completes, verify with:
-- omp doctor
-- omp status
-
-Finally, summarize:
-- configured hooks and install status
-- server URL
-- token status
+Run `omp setup` interactively — do NOT pass any flags.
+Ask me for each input (server URL, auth, device name, hooks).
+When done, run `omp doctor` and summarize the result.
 ```
 
 <div><img src="https://quickstart-for-agents.vercel.app/api/footer.svg?theme=opencode&model=OpenCode&agent=Installer" width="100%" /></div>

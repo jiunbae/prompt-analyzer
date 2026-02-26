@@ -16,7 +16,6 @@ export function hashData(data: unknown): string {
 export async function getCachedInsight(
   userId: string,
   insightType: string,
-  parameters?: Record<string, unknown>,
 ): Promise<InsightResult | null> {
 
   const conditions = [

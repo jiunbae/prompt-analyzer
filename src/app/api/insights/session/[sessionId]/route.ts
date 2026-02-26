@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { rateLimiters } from "@/lib/rate-limit";
 import { handler as sessionStoryHandler } from "@/extensions/session-story/processor";
 import {
@@ -63,7 +64,7 @@ export async function GET(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Session story API error:", error);
+    logger.error({ err: error }, "Session story API error");
     return NextResponse.json(
       { error: "Failed to generate session story" },
       { status: 500 },

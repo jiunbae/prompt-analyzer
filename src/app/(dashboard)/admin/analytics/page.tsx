@@ -10,6 +10,7 @@ import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { TokenUsageChart } from "@/components/charts/token-usage-chart";
 import { ProjectActivityChart } from "@/components/charts/project-activity-chart";
 import { SessionChart } from "@/components/charts/session-chart";
+import { formatNumber } from "@/lib/format";
 
 interface UserOption {
   id: string;
@@ -78,12 +79,6 @@ const USER_COLORS = [
   "#38bdf8", "#a78bfa", "#fb923c", "#4ade80",
   "#f87171", "#2dd4bf", "#e879f9", "#facc15",
 ];
-
-function formatNumber(num: number): string {
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
-  if (num >= 1000) return (num / 1000).toFixed(1) + "K";
-  return num.toString();
-}
 
 function formatDate(date: string): string {
   return new Intl.DateTimeFormat("en-US", {

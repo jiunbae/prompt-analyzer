@@ -8,6 +8,7 @@ import type {
   InsightTrend,
 } from "../types";
 import { callLLM, getLLMConfig } from "../llm";
+import { logger } from "@/lib/logger";
 
 interface WeekStats {
   totalPrompts: number;
@@ -25,8 +26,6 @@ async function queryWeekStats(
   from: Date,
   to: Date,
 ): Promise<WeekStats> {
-  const database = db;
-
   const whereClause = and(
     eq(schema.prompts.userId, userId),
     gte(schema.prompts.timestamp, from),
@@ -34,7 +33,7 @@ async function queryWeekStats(
   );
 
   const [overview, projects, dailyCounts] = await Promise.all([
-    database
+    db
       .select({
         totalPrompts: sql<number>`count(*)`,
         totalTokens: sql<number>`coalesce(sum(coalesce(token_estimate, 0)), 0)`,
@@ -46,7 +45,7 @@ async function queryWeekStats(
       .from(schema.prompts)
       .where(whereClause),
 
-    database
+    db
       .select({
         project: schema.prompts.projectName,
         count: sql<number>`count(*)`,
@@ -57,7 +56,7 @@ async function queryWeekStats(
       .orderBy(sql`count(*) DESC`)
       .limit(10),
 
-    database
+    db
       .select({
         date: sql<string>`date(${schema.prompts.timestamp})`,
         count: sql<number>`count(*)`,
@@ -402,7 +401,7 @@ Respond ONLY with valid JSON.`;
 
     return result;
   } catch (error) {
-    console.error("Weekly trends LLM error:", error);
+    logger.error({ err: error }, "Weekly trends LLM error");
     const fallback = buildStatsOnlyInsight(currentWeek, previousWeek);
     fallback.recommendations = [
       ...(fallback.recommendations ?? []),

@@ -8,6 +8,7 @@ import type {
   InsightTrend,
 } from "../types";
 import { callLLM, getLLMConfig } from "../llm";
+import { logger } from "@/lib/logger";
 
 interface DailyStats {
   totalPrompts: number;
@@ -27,8 +28,6 @@ async function queryDailyStats(
   from: Date,
   to: Date,
 ): Promise<DailyStats> {
-  const database = db;
-
   const whereClause = and(
     eq(schema.prompts.userId, userId),
     gte(schema.prompts.timestamp, from),
@@ -36,7 +35,7 @@ async function queryDailyStats(
   );
 
   const [overview, hourly, projects] = await Promise.all([
-    database
+    db
       .select({
         totalPrompts: sql<number>`count(*)`,
         totalTokens: sql<number>`coalesce(sum(coalesce(token_estimate, 0)), 0)`,
@@ -48,7 +47,7 @@ async function queryDailyStats(
       .from(schema.prompts)
       .where(whereClause),
 
-    database
+    db
       .select({
         hour: sql<number>`extract(hour from ${schema.prompts.timestamp})`,
         count: sql<number>`count(*)`,
@@ -59,7 +58,7 @@ async function queryDailyStats(
       .orderBy(sql`count(*) DESC`)
       .limit(1),
 
-    database
+    db
       .select({
         project: schema.prompts.projectName,
         count: sql<number>`count(*)`,
@@ -275,7 +274,7 @@ Respond ONLY with valid JSON.`;
 
     return result;
   } catch (error) {
-    console.error("Daily summary LLM error:", error);
+    logger.error({ err: error }, "Daily summary LLM error");
     // Fall back to stats-only on LLM failure
     const fallback = buildStatsOnlyInsight(stats);
     fallback.recommendations = [

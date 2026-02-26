@@ -51,16 +51,6 @@ export function estimateTokens(text: string): number {
 }
 
 /**
- * Count words in text
- */
-export function countWords(text: string): number {
-  return text
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word.length > 0).length;
-}
-
-/**
  * Format date to display string
  */
 export function formatDate(date: Date | string): string {
@@ -72,12 +62,4 @@ export function formatDate(date: Date | string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-/**
- * Truncate text with ellipsis
- */
-export function truncate(text: string, length: number): string {
-  if (text.length <= length) return text;
-  return text.slice(0, length) + "...";
 }

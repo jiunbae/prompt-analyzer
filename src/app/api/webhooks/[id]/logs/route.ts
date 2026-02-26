@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -59,7 +60,7 @@ export async function GET(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Webhook logs error:", error);
+    logger.error({ err: error }, "Webhook logs error");
     return NextResponse.json(
       { error: "Failed to fetch webhook logs" },
       { status: 500 }

@@ -11,8 +11,6 @@ import { SessionStoryButton } from "@/components/insights/session-story-button";
 
 export const dynamic = "force-dynamic";
 
-const getCurrentUser = getSessionUser;
-
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -44,7 +42,7 @@ interface SessionDetailPageProps {
 
 export default async function SessionDetailPage({ params }: SessionDetailPageProps) {
   const { sessionId } = await params;
-  const user = await getCurrentUser();
+  const user = await getSessionUser();
   if (!user) return null;
 
   const isAdmin = await checkIsAdmin(user.userId);

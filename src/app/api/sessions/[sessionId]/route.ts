@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import * as schema from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
@@ -62,7 +63,7 @@ export async function GET(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Session detail API error:", error);
+    logger.error({ err: error }, "Session detail API error");
     return NextResponse.json(
       { error: "Failed to load session" },
       { status: 500 }

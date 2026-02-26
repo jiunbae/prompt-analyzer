@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { z } from "zod";
 
 /**
  * GET /api/admin/users
@@ -29,7 +31,7 @@ export async function GET() {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Error listing users:", error);
+    logger.error({ err: error }, "Error listing users");
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }
@@ -42,14 +44,26 @@ export async function PATCH(request: NextRequest) {
   try {
     const session = await requireAdmin();
 
-    const { userId, isAdmin } = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
 
-    if (!userId || typeof isAdmin !== "boolean") {
+    const patchSchema = z.object({
+      userId: z.string().uuid(),
+      isAdmin: z.boolean(),
+    });
+    const parsed = patchSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "userId and isAdmin (boolean) are required" },
+        { error: "userId (UUID) and isAdmin (boolean) are required" },
         { status: 400 },
       );
     }
+
+    const { userId, isAdmin } = parsed.data;
 
     // Prevent admin from removing their own admin status
     if (userId === session.userId && !isAdmin) {
@@ -79,7 +93,7 @@ export async function PATCH(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Error updating user:", error);
+    logger.error({ err: error }, "Error updating user");
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }

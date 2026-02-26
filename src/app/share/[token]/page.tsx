@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
@@ -64,7 +65,7 @@ async function getSharedPromptReadOnly(token: string): Promise<SharedPromptData 
       sharedAt: shared.createdAt,
     };
   } catch (error) {
-    console.error("Error fetching shared prompt (read-only):", error);
+    logger.error({ err: error }, "Error fetching shared prompt (read-only)");
     return null;
   }
 }
@@ -119,7 +120,7 @@ async function getSharedPromptAndIncrement(token: string): Promise<SharedPromptD
       sharedAt: shared.createdAt,
     };
   } catch (error) {
-    console.error("Error fetching shared prompt:", error);
+    logger.error({ err: error }, "Error fetching shared prompt");
     return null;
   }
 }

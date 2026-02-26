@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { logger } from "@/lib/logger";
 
 // GET /api/share/[token] - Public endpoint, no auth required
 export async function GET(
@@ -76,7 +77,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error("Share [token] GET error:", error);
+    logger.error({ err: error }, "Share [token] GET error");
     return NextResponse.json(
       { error: "Failed to fetch shared prompt" },
       { status: 500 }

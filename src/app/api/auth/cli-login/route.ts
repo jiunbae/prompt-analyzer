@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import {
   verifyPassword,
   hashPassword,
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("CLI login error:", error);
+    logger.error({ err: error }, "CLI login error");
     return NextResponse.json(
       { error: "An error occurred during authentication" },
       { status: 500 }

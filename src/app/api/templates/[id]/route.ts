@@ -3,23 +3,9 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
-
-const CATEGORIES = [
-  "debugging",
-  "code-review",
-  "feature",
-  "refactoring",
-  "testing",
-  "documentation",
-  "other",
-] as const;
-
-const templateVariableSchema = z.object({
-  name: z.string().min(1).max(100).regex(/^\w+$/, "Variable names must be alphanumeric/underscore only"),
-  default: z.string().max(1000).default(""),
-  description: z.string().max(500).default(""),
-});
+import { CATEGORIES, templateVariableSchema } from "../shared";
 
 const updateTemplateSchema = z.object({
   title: z.string().min(1).max(255).optional(),
@@ -76,7 +62,7 @@ export async function PUT(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Templates PUT error:", error);
+    logger.error({ err: error }, "Templates PUT error");
     return NextResponse.json({ error: "Failed to update template" }, { status: 500 });
   }
 }
@@ -108,7 +94,7 @@ export async function DELETE(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Templates DELETE error:", error);
+    logger.error({ err: error }, "Templates DELETE error");
     return NextResponse.json({ error: "Failed to delete template" }, { status: 500 });
   }
 }
@@ -141,7 +127,7 @@ export async function GET(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Templates GET [id] error:", error);
+    logger.error({ err: error }, "Templates GET [id] error");
     return NextResponse.json({ error: "Failed to fetch template" }, { status: 500 });
   }
 }

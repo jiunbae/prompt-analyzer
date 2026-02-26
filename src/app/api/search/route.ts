@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { rateLimiters } from "@/lib/rate-limit";
 import { db } from "@/db/client";
 import { sql } from "drizzle-orm";
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Search API error:", error);
+    logger.error({ err: error }, "Search API error");
     return NextResponse.json(
       { error: "Search failed" },
       { status: 500 }

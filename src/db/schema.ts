@@ -109,6 +109,7 @@ export const prompts = pgTable(
     index("idx_prompts_user").on(table.userId),
     index("idx_prompts_session_id").on(table.sessionId),
     index("idx_prompts_search_vector").using("gin", table.searchVector),
+    index("idx_prompts_text_trgm").using("gin", sql`LEFT(prompt_text, 500) gin_trgm_ops`),
     index("idx_prompts_user_timestamp").on(table.userId, table.timestamp),
     index("idx_prompts_user_project").on(table.userId, table.projectName),
   ]

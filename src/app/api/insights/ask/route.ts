@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { rateLimiters } from "@/lib/rate-limit";
 import { callLLM, getLLMConfig } from "@/extensions/llm";
 import type { InsightResult } from "@/extensions/types";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, gte, sql, desc } from "drizzle-orm";
+import { extractRows } from "@/lib/drizzle-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -205,10 +207,8 @@ export async function POST(request: NextRequest) {
 
     const totalCount = totalCountResult[0]?.count ?? 0;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dailyRows = ((dailySummaryResult as any).rows ?? dailySummaryResult) as Record<string, unknown>[];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionRows = ((recentSessionsResult as any).rows ?? recentSessionsResult) as Record<string, unknown>[];
+    const dailyRows = extractRows(dailySummaryResult);
+    const sessionRows = extractRows(recentSessionsResult);
 
     const dataContext = {
       total_prompts_30d: totalCount,
@@ -290,7 +290,7 @@ ${question}
     try {
       parsed = JSON.parse(extractJsonContent(response.content));
     } catch {
-      console.error("Failed to parse LLM response:", response.content.slice(0, 200));
+      logger.warn({ preview: response.content.slice(0, 200) }, "Failed to parse LLM response");
       return NextResponse.json({ error: "Failed to parse response from AI model." }, { status: 502 });
     }
 
@@ -301,7 +301,7 @@ ${question}
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Ask data API error:", error);
+    logger.error({ err: error }, "Ask data API error");
     return NextResponse.json(
       { error: "Failed to process your question" },
       { status: 500 },

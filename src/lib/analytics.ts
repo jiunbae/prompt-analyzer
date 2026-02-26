@@ -2,6 +2,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { desc, sql, eq, and, gte, lt } from "drizzle-orm";
 import { computeSessions } from "@/lib/session-analysis";
+import { logger } from "@/lib/logger";
 
 export interface AnalyticsData {
   stats: {
@@ -57,11 +58,7 @@ export function getLastNDays(end: Date, days: number) {
   return result;
 }
 
-export function formatNumber(num: number): string {
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
-  if (num >= 1000) return (num / 1000).toFixed(1) + "K";
-  return num.toString();
-}
+export { formatNumber } from "@/lib/format";
 
 export async function getAnalytics(userId: string | null): Promise<AnalyticsData | null> {
   try {
@@ -262,7 +259,7 @@ export async function getAnalytics(userId: string | null): Promise<AnalyticsData
       },
     };
   } catch (error) {
-    console.error("Analytics error:", error);
-    return null;
+    logger.error({ err: error, userId }, "Failed to load analytics data");
+    throw error;
   }
 }

@@ -1,5 +1,6 @@
 import type { ProcessorInput, InsightResult } from "../types";
 import { getLLMConfig, callLLM } from "../llm";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { sql, eq, and } from "drizzle-orm";
@@ -135,7 +136,7 @@ function parseLLMResponse(
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    console.error("Failed to parse LLM response for prompt quality:", cleaned.slice(0, 200));
+    logger.warn({ preview: cleaned.slice(0, 200) }, "Failed to parse LLM response for prompt quality");
     return [];
   }
 
@@ -335,7 +336,7 @@ export async function handler(input: ProcessorInput): Promise<InsightResult> {
           }
         } catch (llmError) {
           // LLM call failed, fall back to heuristic for entire batch
-          console.error("LLM call failed, using heuristic fallback:", llmError);
+          logger.warn({ err: llmError }, "LLM call failed, using heuristic fallback");
           for (const prompt of batch) {
             collectHeuristicUpdate(prompt);
           }

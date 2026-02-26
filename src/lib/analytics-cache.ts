@@ -46,10 +46,14 @@ export async function refreshDailyAggregations(
         )
         .groupBy(sql`date(${schema.prompts.timestamp})`);
 
-      for (const row of dailyRows) {
+      if (dailyRows.length > 0) {
+        const values = dailyRows
+          .map((row) => sql`(gen_random_uuid(), ${userId}, ${row.date}, ${row.promptCount}, ${row.totalChars}, ${row.totalTokensEst}, ${row.totalResponseTokens}, ${row.uniqueProjects}, ${row.avgPromptLength}, now())`)
+          .reduce((acc, v, i) => (i === 0 ? v : sql`${acc}, ${v}`));
+
         await tx.execute(sql`
           INSERT INTO analytics_daily (id, user_id, date, prompt_count, total_chars, total_tokens_est, total_response_tokens, unique_projects, avg_prompt_length, updated_at)
-          VALUES (gen_random_uuid(), ${userId}, ${row.date}, ${row.promptCount}, ${row.totalChars}, ${row.totalTokensEst}, ${row.totalResponseTokens}, ${row.uniqueProjects}, ${row.avgPromptLength}, now())
+          VALUES ${values}
           ON CONFLICT (user_id, date)
           DO UPDATE SET
             prompt_count = EXCLUDED.prompt_count,

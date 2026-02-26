@@ -1,9 +1,11 @@
 import { SessionCard } from "@/components/session-card";
 import { SessionFilters } from "@/components/session-filters";
 import { getSessionUser } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
+import { extractRows } from "@/lib/drizzle-utils";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -135,12 +137,10 @@ async function getSessions(params: SearchParams, userId: string) {
 
 
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sRows = (sessionsResult as any).rows ?? sessionsResult;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cRows = (countResult as any).rows ?? countResult;
+    const sRows = extractRows(sessionsResult) as unknown as SessionRow[];
+    const cRows = extractRows(countResult);
     return {
-      sessions: sRows as SessionRow[],
+      sessions: sRows,
       totalCount: Number((cRows[0] as Record<string, unknown>)?.count ?? 0),
       projects: projectsResult.map((p) => ({ name: p.name ?? "", count: Number(p.count) })),
       sources: sourcesResult.map((s) => ({ name: s.name ?? "", count: Number(s.count) })),
@@ -148,7 +148,7 @@ async function getSessions(params: SearchParams, userId: string) {
       workspaces: workspacesResult.map((w) => ({ name: w.name ?? "", count: Number(w.count) })),
     };
   } catch (error) {
-    console.error("Sessions query error:", error);
+    logger.error({ err: error }, "Sessions query error");
 
     return { sessions: [], totalCount: 0, projects: [], sources: [], devices: [], workspaces: [], error: true };
   }

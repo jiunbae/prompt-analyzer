@@ -1,29 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import * as schema from "@/db/schema";
 import { eq, and, gte, lt, sql } from "drizzle-orm";
+import { extractRows } from "@/lib/drizzle-utils";
+import { parseDate } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
 
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2000;
-
-/** Validate a YYYY-MM-DD string and return a Date (UTC midnight) or null.
- *  Checks calendar validity — rejects impossible dates like 2026-02-31
- *  that JavaScript silently rolls forward.
- */
-function parseDate(value: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const d = new Date(value + "T00:00:00Z");
-  if (isNaN(d.getTime())) return null;
-  // Verify the parsed components match the input to catch rollover (e.g. Feb 31 -> Mar 3)
-  const [year, month, day] = value.split("-").map(Number);
-  if (d.getUTCFullYear() !== year || d.getUTCMonth() + 1 !== month || d.getUTCDate() !== day) {
-    return null;
-  }
-  return d;
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -88,8 +75,7 @@ export async function GET(request: NextRequest) {
       FROM ${schema.prompts}
       WHERE ${whereClause}
     `);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const countRows = ((countResult as any).rows ?? countResult) as Record<string, unknown>[];
+    const countRows = extractRows(countResult);
     const totalCount = Number(countRows[0]?.total ?? 0);
 
     const sessionsResult = await db.execute(sql`
@@ -110,8 +96,7 @@ export async function GET(request: NextRequest) {
       OFFSET ${offset}
     `);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows = ((sessionsResult as any).rows ?? sessionsResult) as Record<string, unknown>[];
+    const rows = extractRows(sessionsResult);
 
     // Group sessions by day (UTC)
     const dayMap = new Map<string, Array<{
@@ -174,7 +159,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Timeline API error:", error);
+    logger.error({ err: error }, "Timeline API error");
     return NextResponse.json(
       { error: "Failed to load timeline" },
       { status: 500 }

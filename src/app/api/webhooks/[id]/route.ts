@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { validateWebhookUrl } from "@/services/webhook";
-
-const VALID_EVENTS = [
-  "prompt.created",
-  "prompt.scored",
-  "session.started",
-  "session.ended",
-  "sync.completed",
-] as const;
+import { VALID_EVENTS } from "../shared";
 
 const updateWebhookSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -133,7 +127,7 @@ export async function PUT(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Webhook update error:", error);
+    logger.error({ err: error }, "Webhook update error");
     return NextResponse.json(
       { error: "Failed to update webhook" },
       { status: 500 }
@@ -174,7 +168,7 @@ export async function DELETE(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Webhook delete error:", error);
+    logger.error({ err: error }, "Webhook delete error");
     return NextResponse.json(
       { error: "Failed to delete webhook" },
       { status: 500 }

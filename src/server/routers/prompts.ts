@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc";
+import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
-import { desc, eq, ilike, sql, and } from "drizzle-orm";
+import { desc, eq, sql, and } from "drizzle-orm";
 
 export const promptsRouter = createTRPCRouter({
   /**

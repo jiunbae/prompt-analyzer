@@ -1,6 +1,8 @@
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, gte, lt, sql, desc } from "drizzle-orm";
+import { extractRows } from "@/lib/drizzle-utils";
+import { logger } from "@/lib/logger";
 
 export interface DashboardData {
   today: { prompts: number; tokens: number; sessions: number; projects: number };
@@ -108,8 +110,7 @@ export async function getDashboardData(userId: string): Promise<DashboardData | 
     const last7Days = dayKeys.map(date => ({ date, count: dailyMap.get(date) ?? 0 }));
 
     // Parse sessions
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sRows = ((recentSessionsRaw as any).rows ?? recentSessionsRaw) as Record<string, unknown>[];
+    const sRows = extractRows(recentSessionsRaw);
     const recentSessions = sRows.map(r => ({
       sessionId: String(r.session_id),
       firstPrompt: String(r.first_prompt ?? ""),
@@ -143,7 +144,7 @@ export async function getDashboardData(userId: string): Promise<DashboardData | 
       })),
     };
   } catch (error) {
-    console.error("Dashboard data error:", error);
+    logger.error({ err: error }, "Dashboard data error");
     return null;
   }
 }

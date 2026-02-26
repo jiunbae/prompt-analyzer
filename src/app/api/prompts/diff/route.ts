@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, checkIsAdmin, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { computeDiff, computeSimilarity } from "@/lib/prompt-diff";
 
 export async function GET(request: NextRequest) {
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Diff API error:", error);
+    logger.error({ err: error }, "Diff API error");
     return NextResponse.json(
       { error: "Failed to compute diff" },
       { status: 500 }

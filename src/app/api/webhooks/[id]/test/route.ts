@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
 import { rateLimiters } from "@/lib/rate-limit";
+import { logger } from "@/lib/logger";
 import { sendTestWebhook } from "@/services/webhook";
 
 /**
@@ -39,7 +40,7 @@ export async function POST(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Webhook test error:", error);
+    logger.error({ err: error }, "Webhook test error");
     return NextResponse.json(
       { error: "Failed to test webhook" },
       { status: 500 }

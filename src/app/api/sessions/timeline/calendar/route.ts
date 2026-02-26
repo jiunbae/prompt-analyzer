@@ -1,25 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import * as schema from "@/db/schema";
 import { eq, and, gte, lt, sql } from "drizzle-orm";
+import { extractRows } from "@/lib/drizzle-utils";
+import { parseDate } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
-
-/** Validate a YYYY-MM-DD string and return a Date (UTC midnight) or null.
- *  Checks calendar validity — rejects impossible dates like 2026-02-31
- *  that JavaScript silently rolls forward.
- */
-function parseDate(value: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const d = new Date(value + "T00:00:00Z");
-  if (isNaN(d.getTime())) return null;
-  const [year, month, day] = value.split("-").map(Number);
-  if (d.getUTCFullYear() !== year || d.getUTCMonth() + 1 !== month || d.getUTCDate() !== day) {
-    return null;
-  }
-  return d;
-}
 
 /**
  * Lightweight endpoint that returns {date, count}[] for the full date range.
@@ -85,8 +73,7 @@ export async function GET(request: NextRequest) {
       GROUP BY ${schema.prompts.sessionId}
     `);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows = ((result as any).rows ?? result) as Record<string, unknown>[];
+    const rows = extractRows(result);
 
     // Aggregate by date (a session's date is based on its first prompt's UTC date)
     const dayMap = new Map<string, number>();
@@ -104,7 +91,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Calendar API error:", error);
+    logger.error({ err: error }, "Calendar API error");
     return NextResponse.json(
       { error: "Failed to load calendar data" },
       { status: 500 }

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import { users, allowedEmails } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
 /**
  * GET /api/admin/allowlist
@@ -42,7 +44,7 @@ export async function GET() {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Error listing allowlist:", error);
+    logger.error({ err: error }, "Error listing allowlist");
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }
@@ -55,16 +57,19 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireAdmin();
 
-    const { email } = await request.json();
-
-    if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
+    const parsed = z.object({ email: z.string().email() }).safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Valid email is required" }, { status: 400 });
     }
+
+    const { email } = parsed.data;
 
     // Check if email already exists in allowlist
     const [existing] = await db
@@ -97,7 +102,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Error adding to allowlist:", error);
+    logger.error({ err: error }, "Error adding to allowlist");
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }
@@ -140,7 +145,7 @@ export async function DELETE(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Error removing from allowlist:", error);
+    logger.error({ err: error }, "Error removing from allowlist");
     return NextResponse.json({ error: "An error occurred" }, { status: 500 });
   }
 }

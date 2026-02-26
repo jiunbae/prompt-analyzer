@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
 
 function escapeRegExp(str: string): string {
@@ -78,7 +79,7 @@ export async function POST(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Templates render error:", error);
+    logger.error({ err: error }, "Templates render error");
     return NextResponse.json({ error: "Failed to render template" }, { status: 500 });
   }
 }

@@ -4,7 +4,6 @@ metadata:
   name: oh-my-prompt-config
   namespace: oh-my-prompt
 data:
-  DATABASE_URL: "postgresql://prompt:prompt123@prompt-db-service:5432/prompts"
   REDIS_URL: "redis://redis:6379"
   NEXT_PUBLIC_APP_URL: "https://prompt.jiun.dev"
   NODE_ENV: "production"

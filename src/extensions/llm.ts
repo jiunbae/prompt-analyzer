@@ -1,4 +1,5 @@
 import type { LLMConfig } from "./types";
+import { logger } from "@/lib/logger";
 
 /**
  * Lightweight LLM client that supports multiple providers.
@@ -12,7 +13,7 @@ export function getLLMConfig(): LLMConfig | null {
   if (!provider) return null;
 
   if (!VALID_PROVIDERS.has(provider)) {
-    console.error(`Invalid OMP_LLM_PROVIDER: "${provider}". Valid: ${[...VALID_PROVIDERS].join(", ")}`);
+    logger.error({ provider, valid: [...VALID_PROVIDERS] }, "Invalid OMP_LLM_PROVIDER");
     return null;
   }
 

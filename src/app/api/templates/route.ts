@@ -3,23 +3,9 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, or, and, sql } from "drizzle-orm";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
-
-const CATEGORIES = [
-  "debugging",
-  "code-review",
-  "feature",
-  "refactoring",
-  "testing",
-  "documentation",
-  "other",
-] as const;
-
-const templateVariableSchema = z.object({
-  name: z.string().min(1).max(100).regex(/^\w+$/, "Variable names must be alphanumeric/underscore only"),
-  default: z.string().max(1000).default(""),
-  description: z.string().max(500).default(""),
-});
+import { CATEGORIES, templateVariableSchema } from "./shared";
 
 const createTemplateSchema = z.object({
   title: z.string().min(1).max(255),
@@ -59,7 +45,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Templates GET error:", error);
+    logger.error({ err: error }, "Templates GET error");
     return NextResponse.json({ error: "Failed to fetch templates" }, { status: 500 });
   }
 }
@@ -96,7 +82,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Templates POST error:", error);
+    logger.error({ err: error }, "Templates POST error");
     return NextResponse.json({ error: "Failed to create template" }, { status: 500 });
   }
 }

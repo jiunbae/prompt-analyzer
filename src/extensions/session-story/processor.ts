@@ -1,5 +1,6 @@
 import type { ProcessorInput, InsightResult, InsightHighlight } from "../types";
 import { callLLM, getLLMConfig } from "../llm";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
@@ -29,11 +30,18 @@ function truncateText(text: string | null, length: number): string {
 async function getSessionPrompts(
   userId: string,
   sessionId: string,
-): Promise<typeof schema.prompts.$inferSelect[]> {
-  const database = db;
-
-  const prompts = await database
-    .select()
+) {
+  return db
+    .select({
+      timestamp: schema.prompts.timestamp,
+      projectName: schema.prompts.projectName,
+      promptType: schema.prompts.promptType,
+      promptLength: schema.prompts.promptLength,
+      tokenEstimate: schema.prompts.tokenEstimate,
+      tokenEstimateResponse: schema.prompts.tokenEstimateResponse,
+      promptText: sql<string>`LEFT(${schema.prompts.promptText}, 200)`.as("prompt_text"),
+      responseText: sql<string | null>`LEFT(${schema.prompts.responseText}, 200)`.as("response_text"),
+    })
     .from(schema.prompts)
     .where(
       and(
@@ -43,14 +51,10 @@ async function getSessionPrompts(
     )
     .orderBy(asc(schema.prompts.timestamp))
     .limit(200);
-
-  return prompts;
 }
 
 async function getRecentSessionId(userId: string): Promise<string | null> {
-  const database = db;
-
-  const [row] = await database
+  const [row] = await db
     .select({ sessionId: schema.prompts.sessionId })
     .from(schema.prompts)
     .where(
@@ -65,9 +69,11 @@ async function getRecentSessionId(userId: string): Promise<string | null> {
   return row?.sessionId ?? null;
 }
 
+type SessionPromptRow = Awaited<ReturnType<typeof getSessionPrompts>>[number];
+
 function buildSessionContext(
   sessionId: string,
-  prompts: typeof schema.prompts.$inferSelect[],
+  prompts: SessionPromptRow[],
 ): SessionContext {
   if (prompts.length === 0) {
     return {
@@ -101,7 +107,7 @@ function buildSessionContext(
 
 function buildFallbackResult(
   sessionId: string,
-  prompts: typeof schema.prompts.$inferSelect[],
+  prompts: SessionPromptRow[],
 ): InsightResult {
   if (prompts.length === 0) {
     return {
@@ -272,7 +278,7 @@ ${JSON.stringify(context, null, 2)}
       generatedAt: new Date().toISOString(),
     };
   } catch (error) {
-    console.error("Session story LLM error:", error);
+    logger.error({ err: error }, "Session story LLM error");
     return buildFallbackResult(sessionId, prompts);
   }
 }

@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/with-auth";
+import { logger } from "@/lib/logger";
 import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { validateWebhookUrl } from "@/services/webhook";
+import { VALID_EVENTS } from "./shared";
 
 export const dynamic = "force-dynamic";
-
-const VALID_EVENTS = [
-  "prompt.created",
-  "prompt.scored",
-  "session.started",
-  "session.ended",
-  "sync.completed",
-] as const;
 
 const createWebhookSchema = z.object({
   name: z.string().min(1).max(255),
@@ -54,7 +48,7 @@ export async function GET() {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Webhooks list error:", error);
+    logger.error({ err: error }, "Webhooks list error");
     return NextResponse.json(
       { error: "Failed to fetch webhooks" },
       { status: 500 }
@@ -123,7 +117,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("Webhook create error:", error);
+    logger.error({ err: error }, "Webhook create error");
     return NextResponse.json(
       { error: "Failed to create webhook" },
       { status: 500 }

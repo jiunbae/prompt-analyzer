@@ -25,11 +25,27 @@ async function resolveIsAdmin(userId: string): Promise<boolean> {
 export const createTRPCContext = async (opts: { headers: Headers }) => {
   const userId = opts.headers.get("x-user-id");
   const email = opts.headers.get("x-user-email");
-  const isAdmin = userId ? await resolveIsAdmin(userId) : false;
 
+  if (!userId) {
+    return { headers: opts.headers, user: null };
+  }
+
+  let cachedIsAdmin: boolean | undefined;
   return {
     headers: opts.headers,
-    user: userId ? { id: userId, email, isAdmin } : null,
+    user: {
+      id: userId,
+      email,
+      get isAdmin() {
+        return cachedIsAdmin;
+      },
+      resolveIsAdmin: async () => {
+        if (cachedIsAdmin === undefined) {
+          cachedIsAdmin = await resolveIsAdmin(userId);
+        }
+        return cachedIsAdmin;
+      },
+    },
   };
 };
 
@@ -61,11 +77,12 @@ const isAuthed = t.middleware(({ ctx, next }) => {
   });
 });
 
-const isAdmin = t.middleware(({ ctx, next }) => {
+const isAdmin = t.middleware(async ({ ctx, next }) => {
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  if (!ctx.user.isAdmin) {
+  const admin = await ctx.user.resolveIsAdmin();
+  if (!admin) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
   }
   return next({
